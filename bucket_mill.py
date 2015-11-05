@@ -514,7 +514,7 @@ def convert_image_to_int8_image(input):
 #cut_image = Image.open("Best Mom Ever Heart3.gif")
 
 if len(argv) < 7:
-    print 'USAGE: python bucket_fill_simple_numpy.py "Best Mom Ever Heart3.gif" W 200 20 3 edge1 test.gcode'
+    print 'USAGE: python bucket_mill.py "Best Mom Ever Heart3.gif" W 200 20 3 edge1 test.gcode'
     print 'input file = "Best Mom Ever Heart3.gif"' #argv[1]
     print 'W or H or Width or Height = "W"' #argv[2]
     print 'measurement in mm of width or height as selected above = "200"' #argv[3]
