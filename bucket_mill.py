@@ -124,6 +124,7 @@ def test_multi_xy_matching_depth(top,bottom,x,y,depth,test_depth_vs_top=True):
     height,width = top.shape
     measure = {}
     overall = False
+    stress = 0
     for direction in directions:
         offset = directions[direction]
         try:
@@ -134,8 +135,10 @@ def test_multi_xy_matching_depth(top,bottom,x,y,depth,test_depth_vs_top=True):
                 bottom_measure = bottom[y+offset[1],x+offset[0]]
                 if test_depth_vs_top:
                     measure[direction] = (bottom_measure >= depth) and (depth > top_measure)
+                    if measure[direction]: stress += 1
                 else:
                     measure[direction] = (bottom_measure >= depth) and (bottom_measure > top_measure)
+                    if measure[direction]: stress += 1
             else:
                 measure[direction] = None
             #print direction,bottom_measure,depth,top_measure,(bottom_measure >= depth),(depth > top_measure)
@@ -144,6 +147,7 @@ def test_multi_xy_matching_depth(top,bottom,x,y,depth,test_depth_vs_top=True):
         except:
             measure[direction] = False
     measure["overall"] = overall
+    measure["stress"] = stress
     return measure
 
 def follow_edge1(top,bottom,nx,ny):
@@ -249,6 +253,7 @@ def follow_edge2(top,bottom,x,y):
 def follow_edge3(top,bottom,x,y):
     positions = []
     pending_positions = []
+    max_stress = 0
     direction = last_dir = "left"
     left = False
     up = False
@@ -264,11 +269,13 @@ def follow_edge3(top,bottom,x,y):
             depth = top[y,x]+1
             top[y][x] += 1
             if last_dir != direction:
-                positions.append([ "line", pending_positions[0], pending_positions[-1] ])
+                positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
                 #print [ "line", pending_positions[0], pending_positions[-1] ]
                 pending_positions = []
+                max_stress = 0
             pending_positions.append([x,y,top[y,x]])
-            #print "APPEND",[x,y,top[y][x]]
+            max_stress = max(max_stress,measure["stress"])
+            #print "APPEND",[x,y,top[y][x]],measure["stress"]
         last_dir = direction
         if measure["left"]:
             direction = "left"
@@ -294,7 +301,7 @@ def follow_edge3(top,bottom,x,y):
         y += directions[direction][1]
         measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
     if pending_positions:
-        positions.append([ "line", pending_positions[0], pending_positions[-1] ])
+        positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
         x = pending_positions[-1][0]
         y = pending_positions[-1][1]
     return top,positions,x,y
@@ -310,6 +317,7 @@ def follow_edge4(top,bottom,xin,yin):
     depth = top[y,x]+1
     measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
     shift = False
+    max_stress = 0
     #print "A",measure
     while measure["overall"]:
         #print "B",measure
@@ -317,11 +325,13 @@ def follow_edge4(top,bottom,xin,yin):
             depth = top[y,x]+1
             top[y,x] += 1
             if last_dir != direction:
-                positions.append([ "line", pending_positions[0], pending_positions[-1] ])
+                positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
                 #print [ "line", pending_positions[0], pending_positions[-1] ]
                 pending_positions = []
+                max_stress = 0
             pending_positions.append([x,y,top[y,x]])
-            #print "APPEND",[x,y,top[y][x]]
+            max_stress = max(max_stress,measure["stress"])
+            #print "APPEND",[x,y,top[y][x]], measure["overall"]
         last_dir = direction
         if shift:
             alt = last_directions.pop(-3)
@@ -344,7 +354,7 @@ def follow_edge4(top,bottom,xin,yin):
         measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
     if pending_positions:
         #positions.append("#add pending positions")
-        positions.append([ "line", pending_positions[0], pending_positions[-1] ])
+        positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
         #positions = positions + pending_positions
         x = pending_positions[-1][0]
         y = pending_positions[-1][1]
@@ -445,12 +455,19 @@ def find_nearby_cut2(top,bottom,x,y):
         r += 1
     return None
 
-def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed=400, rapid_speed=700, safe_distance=2,unit="mm",offsets=[0,0,0]):
+def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed=400, rapid_speed=700, safe_distance=2,unit="mm",offsets=[0,0,0],minimum_stress=1):
     #if the next cut location is more than one space away, go to safe_distance before moving
     #if the next cut location is diagonal, go to safe_distance before moving
     #if the next cut depth is not as deep as the current depth, change to the new depth before moving
     #after moving to the next cut location, make sure we are at the right depth
     #if the next cut is a string, it might be "seek" which will tell us we might need to switch to safe_distance before moving
+
+    calculated_cut_speeds = []
+    for stress in range(6):
+        calculated_speed = ( stress*cut_speed + (5-stress)*rapid_speed )/ 5
+        calculated_cut_speeds.append(calculated_speed)
+        
+    print "calculated cut speeds by stress:",calculated_cut_speeds
     gcode = []
     if unit.lower() == "mm":
         gcode.append("G21")
@@ -486,13 +503,32 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
             #the end position will be done below before comparing the Z
             z = end[2]
             cut = end
+        elif cut[0] == "line_with_stress":
+            start = cut[1]
+            end = cut[2]
+            stress = min( cut[3] + minimum_stress, 5 )
+            calculated_speed = calculated_cut_speeds[stress]
+            #gcode.append("#start line")
+            travel = abs(start[0]-x) + abs(start[1]-y)
+            if travel > 1:
+                gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
+                gcode.append("G0 F%.3f X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
+            else:
+                gcode.append("G1 F%.3f X%.3f Y%.3f (vs %.3f)" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1],cut_speed))
+            if travel > 1 or start[2] != z:
+                gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
+            #else:
+            #    gcode.append("#Z was the same %s vs %s" % (start[2],z))
+            #the end position will be done below before comparing the Z
+            z = end[2]
+            cut = end
         elif (abs(x-cut[0])+abs(y-cut[1])) > 1:
             #print "Difference:",abs(x-cut[0]),abs(y-cut[1])
             gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
             z = safe_distance
         elif z < cut[2]:
             gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,offsets[2]-cut[2]))
-        gcode.append("G1 F%.3f X%.3f Y%.3f" % (cut_speed,offsets[0]+cut[0],offsets[1]+cut[1]))
+        gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+cut[0],offsets[1]+cut[1]))
         if z != cut[2]:
             #print z,offsets[2]-cut[2]
             gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-cut[2]))
