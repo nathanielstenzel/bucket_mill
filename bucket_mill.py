@@ -130,8 +130,8 @@ def test_multi_xy_matching_depth(top,bottom,x,y,depth,test_depth_vs_top=True):
             test_y = y+offset[1]
             test_x = x+offset[0]
             if test_y >= 0 and test_x >= 0 and test_y < height and test_x < width:
-                top_measure = top[test_y][test_x]
-                bottom_measure = bottom[y+offset[1]][x+offset[0]]
+                top_measure = top[test_y,test_x]
+                bottom_measure = bottom[y+offset[1],x+offset[0]]
                 if test_depth_vs_top:
                     measure[direction] = (bottom_measure >= depth) and (depth > top_measure)
                 else:
@@ -159,12 +159,12 @@ def follow_edge1(top,bottom,nx,ny):
     while measure["overall"]:
         #print measure
         if measure["center"]:
-            top[y][x] += 1
+            top[y,x] += 1
             if last_dir != dir:
                 positions.append([ "line", pending_positions[0], pending_positions[-1] ])
                 #print [ "line", pending_positions[0], pending_positions[-1] ]
                 pending_positions = []
-            pending_positions.append([x,y,top[y][x]])
+            pending_positions.append([x,y,top[y,x]])
             #print "APPEND",[x,y,top[y][x]]
         last_dir = dir
         #print "%s,%s,%s while bottom is %s" % (x,y,top[y][x],bottom[y][x])
@@ -204,18 +204,18 @@ def follow_edge2(top,bottom,x,y):
     last_dir = 0
     direction="up"
     direction_keys = ["up","right","down","left","center"]
-    depth = top[y][x]+1
+    depth = top[y,x]+1
     measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
     #print "A",measure
     while measure["overall"]:
         #print "B",measure
         if measure["center"]:
-            top[y][x] += 1
+            top[y,x] += 1
             if last_dir != dir or direction == "center":
                 positions.append([ "line", pending_positions[0], pending_positions[-1] ])
                 #print [ "line", pending_positions[0], pending_positions[-1] ]
                 pending_positions = []
-            pending_positions.append([x,y,top[y][x]])
+            pending_positions.append([x,y,top[y,x]])
         #print "APPEND",[x,y,top[y][x]]
         last_dir = dir
         found = False
@@ -253,7 +253,7 @@ def follow_edge3(top,bottom,x,y):
     left = False
     up = False
     horizontal = True
-    depth = top[y][x]+1
+    depth = top[y,x]+1
     measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
     #print "A",measure
     while measure["overall"]:
@@ -261,13 +261,13 @@ def follow_edge3(top,bottom,x,y):
         left = True
         up = True
         if measure["center"]:
-            depth = top[y][x]+1
+            depth = top[y,x]+1
             top[y][x] += 1
             if last_dir != direction:
                 positions.append([ "line", pending_positions[0], pending_positions[-1] ])
                 #print [ "line", pending_positions[0], pending_positions[-1] ]
                 pending_positions = []
-            pending_positions.append([x,y,top[y][x]])
+            pending_positions.append([x,y,top[y,x]])
             #print "APPEND",[x,y,top[y][x]]
         last_dir = direction
         if measure["left"]:
@@ -307,20 +307,20 @@ def follow_edge4(top,bottom,xin,yin):
     pending_positions = []
     direction = last_dir = "left"
     last_directions = ["down","right","up","left"]
-    depth = top[y][x]+1
+    depth = top[y,x]+1
     measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
     shift = False
     #print "A",measure
     while measure["overall"]:
         #print "B",measure
         if measure["center"]:
-            depth = top[y][x]+1
-            top[y][x] += 1
+            depth = top[y,x]+1
+            top[y,x] += 1
             if last_dir != direction:
                 positions.append([ "line", pending_positions[0], pending_positions[-1] ])
                 #print [ "line", pending_positions[0], pending_positions[-1] ]
                 pending_positions = []
-            pending_positions.append([x,y,top[y][x]])
+            pending_positions.append([x,y,top[y,x]])
             #print "APPEND",[x,y,top[y][x]]
         last_dir = direction
         if shift:
@@ -445,7 +445,7 @@ def find_nearby_cut2(top,bottom,x,y):
         r += 1
     return None
 
-def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=300, z_rapid_speed=100, rapid_speed=400, safe_distance=2,unit="mm",offsets=[0,0,0]):
+def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed=400, rapid_speed=700, safe_distance=2,unit="mm",offsets=[0,0,0]):
     #if the next cut location is more than one space away, go to safe_distance before moving
     #if the next cut location is diagonal, go to safe_distance before moving
     #if the next cut depth is not as deep as the current depth, change to the new depth before moving
@@ -457,15 +457,17 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=300, z_rapid_speed=100, rapid_speed
     elif unit.lower() == "inch":
         gcode.append("G20")
     gcode.append("G17 G90 G64 M3 S3000 M7")
-    gcode.append("G0F%f" % rapid_speed)
-    gcode.append("G1F%f" % cut_speed)
+    gcode.append("G0 X0 Y0 F%f" % rapid_speed)
+    gcode.append("G0 Z0 F%f" % z_rapid_speed)
+    gcode.append("G1 X0 Y0 F%f" % cut_speed)
+    gcode.append("G1 Z0 F%f" % z_cut_speed)
     for cut in cuts:
         #print "CUT[0]:",cut[0]
         if cut == "seek":
             #gcode.append("#seek")
             continue
-        elif type(cut) == str and cut.startswith("#"):
-            gcode.append(cut)
+        elif type(cut) == str and ( cut.startswith("#") or cut.startswith("(") ):
+            gcode.append("(%s)" % cut)
             continue
         elif cut[0] == "line":
             start = cut[1]
@@ -473,12 +475,12 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=300, z_rapid_speed=100, rapid_speed
             #gcode.append("#start line")
             travel = abs(start[0]-x) + abs(start[1]-y)
             if travel > 1:
-                gcode.append("G0 Z%.3f" % (safe_distance))
-                gcode.append("G0 X%.3f Y%.3f" % (offsets[0]+start[0],offsets[1]+start[1]))
+                gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
+                gcode.append("G0 F%.3f X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
             else:
-                gcode.append("G1 X%.3f Y%.3f" % (offsets[0]+start[0],offsets[1]+start[1]))
+                gcode.append("G1 F%.3f X%.3f Y%.3f" % (cut_speed,offsets[0]+start[0],offsets[1]+start[1]))
             if travel > 1 or start[2] != z:
-                gcode.append("G1 Z%.3f" % (offsets[2]-start[2]))
+                gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
             #else:
             #    gcode.append("#Z was the same %s vs %s" % (start[2],z))
             #the end position will be done below before comparing the Z
@@ -486,14 +488,14 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=300, z_rapid_speed=100, rapid_speed
             cut = end
         elif (abs(x-cut[0])+abs(y-cut[1])) > 1:
             #print "Difference:",abs(x-cut[0]),abs(y-cut[1])
-            gcode.append("G0 Z%.3f" % (safe_distance))
+            gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
             z = safe_distance
         elif z < cut[2]:
-            gcode.append("G0 Z%.3f" % (offsets[2]-cut[2]))
-        gcode.append("G1 X%.3f Y%.3f" % (offsets[0]+cut[0],offsets[1]+cut[1]))
+            gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,offsets[2]-cut[2]))
+        gcode.append("G1 F%.3f X%.3f Y%.3f" % (cut_speed,offsets[0]+cut[0],offsets[1]+cut[1]))
         if z != cut[2]:
             #print z,offsets[2]-cut[2]
-            gcode.append("G1 Z%.3f" % (offsets[2]-cut[2]))
+            gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-cut[2]))
         x = cut[0]
         y = cut[1]
         z = cut[2]
@@ -512,7 +514,7 @@ def convert_image_to_int8_image(input):
 #cut_image = Image.open("Best Mom Ever Heart3.gif")
 
 if len(argv) < 7:
-    print 'USAGE: python bucket_mill.py "Best Mom Ever Heart3.gif" W 200 20 3 edge1 test.gcode'
+    print 'USAGE: python bucket_fill_simple_numpy.py "Best Mom Ever Heart3.gif" W 200 20 3 edge1 test.gcode'
     print 'input file = "Best Mom Ever Heart3.gif"' #argv[1]
     print 'W or H or Width or Height = "W"' #argv[2]
     print 'measurement in mm of width or height as selected above = "200"' #argv[3]
