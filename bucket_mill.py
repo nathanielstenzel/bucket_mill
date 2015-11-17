@@ -436,20 +436,26 @@ def follow_edge4(layer,xin,yin,this_depth):
     last_directions = ["down","right","up","left"]
     measure = get_direction_results(layer,x,y)
     shift = False
-    max_stress = 0
+    stress = measure["stress"]
     #print "A",measure
+    save_points = [[x,y,this_depth]]
     while measure["overall"]:
+        last_stress = stress
+        stress = measure["stress"]
         #print "B",measure
         if measure["center"]:
             layer[y,x] = False
-            if last_dir != direction:
-                positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
+            if last_dir != direction or stress != last_stress:
+                if len(pending_positions) == 1:
+                    positions.append( ["dot",pending_positions[0]] )
+                    #print "DOT"
+                else:
+                    positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], last_stress ])
                 #print [ "line", pending_positions[0], pending_positions[-1] ]
                 pending_positions = []
-                max_stress = 0
+            save_points = [[x,y,this_depth]] + save_points[:10]
             pending_positions.append([x,y,this_depth])
-            max_stress = max(max_stress,measure["stress"])
-            #print "APPEND",[x,y,this_depth], measure["overall"]
+            #print "APPEND",[x,y,this_depth], measure["stress"]
         last_dir = direction
         if shift:
             alt = last_directions.pop(-3)
@@ -470,9 +476,27 @@ def follow_edge4(layer,xin,yin,this_depth):
         x += directions[direction][0]
         y += directions[direction][1]
         measure = get_direction_results(layer,x,y)
+        if not measure["overall"]:
+            #print "BACKTRACING!"
+            for dot in save_points:
+                testx,testy,testz = dot #testz is not used
+                measure = get_direction_results(layer,testx,testy)
+                if measure["overall"]:
+                    #print "BACKED UP to %s" % dot
+                    positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], last_stress ])
+                    positions.append("#BACK UP to %s" % dot)
+                    positions.append(["line_with_stress", pending_positions[-1],dot,0]) #no stress because we are just retracing our steps
+                    pending_positions = [dot]
+                    x,y = testx,testy
+                    alt = last_directions.pop(-2)
+                    last_directions.append(alt)
+                    x += directions[direction][0]
+                    y += directions[direction][1]
+                    shift = True
+                    break
     if pending_positions:
         #positions.append("#add pending positions")
-        positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
+        positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], last_stress ])
         #positions = positions + pending_positions
         x = pending_positions[-1][0]
         y = pending_positions[-1][1]
@@ -615,6 +639,8 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
         elif command in ["line","line_with_stress"]: #start cut from point A and end it later in the loop
             start = cut[1]
             end = cut[2]
+            if len(end) < 3 or len(start) < 3:
+                print "BAD LINE:",start,end
             if end[2] <> start[2]:
                 print "Z mismatch on %s!" % cut
 
