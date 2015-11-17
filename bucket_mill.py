@@ -426,7 +426,7 @@ def follow_edge3(top,bottom,x,y):
         y = pending_positions[-1][1]
     return top,positions,x,y
 
-def follow_edge4(top,bottom,xin,yin):
+def follow_edge4(layer,xin,yin,this_depth):
     x = xin
     y = yin
     positions = []
@@ -434,24 +434,22 @@ def follow_edge4(top,bottom,xin,yin):
     pending_positions = []
     direction = last_dir = "left"
     last_directions = ["down","right","up","left"]
-    depth = top[y,x]+1
-    measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
+    measure = get_direction_results(layer,x,y)
     shift = False
     max_stress = 0
     #print "A",measure
     while measure["overall"]:
         #print "B",measure
         if measure["center"]:
-            depth = top[y,x]+1
-            top[y,x] += 1
+            layer[y,x] = False
             if last_dir != direction:
                 positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
                 #print [ "line", pending_positions[0], pending_positions[-1] ]
                 pending_positions = []
                 max_stress = 0
-            pending_positions.append([x,y,top[y,x]])
+            pending_positions.append([x,y,this_depth])
             max_stress = max(max_stress,measure["stress"])
-            #print "APPEND",[x,y,top[y][x]], measure["overall"]
+            #print "APPEND",[x,y,this_depth], measure["overall"]
         last_dir = direction
         if shift:
             alt = last_directions.pop(-3)
@@ -471,7 +469,7 @@ def follow_edge4(top,bottom,xin,yin):
         direction = last_directions[-1]
         x += directions[direction][0]
         y += directions[direction][1]
-        measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
+        measure = get_direction_results(layer,x,y)
     if pending_positions:
         #positions.append("#add pending positions")
         positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
@@ -480,7 +478,7 @@ def follow_edge4(top,bottom,xin,yin):
         y = pending_positions[-1][1]
         #positions.append("#line %s to %s" % (pending_positions[0],pending_positions[-1]))
     #positions.append("#ending at %s,%s" % (x,y))
-    return top,positions,x,y
+    return x,y,positions
 
 def find_nearby_cut(top,bottom,x,y):
     valid = False
@@ -876,24 +874,25 @@ elif pattern.upper() == "EDGE3":
     print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
 
 elif pattern.upper() == "EDGE4":
-    print "TEST ANOTHER EDGE FOLLOW METHOD, BUT WITH DEPTH MATCHING"
+    print "ZIGZAG ONE LAYER AT A TIME"
     cut_positions = []
-    start_position = find_nearby_cut2(top,bottom,0,0)
-    print start_position
+    layer = bottom > top
+    start_position = find_nearby_dot(layer,0,0)
+    depth = 0
+    layer = bottom > top
     while start_position:
         cut_positions = cut_positions + ["seek"]
         x,y = start_position
         #print start_position
-        top,new_cuts,x,y = follow_edge4(top,bottom,x,y)
-        cut_positions = cut_positions + new_cuts
-        #cut_positions.append("#seek starting at %s,%s" % (x,y))
-        start_position = find_nearby_cut2(top,bottom,x,y)
-        
-    #print "TOP\t\t\t\t\tBOTTOM"
-    #for y in range(len(top)):
-    #    print top[y],bottom[y]
-    #print "CUTS"
-    #print cut_positions
+        #print "%i to go" % (layer == False).sum()
+        x,y,positions = follow_edge4(layer,x,y,depth)
+        cut_positions = cut_positions + positions
+        if (layer == False).all():
+            print top.max(),"vs",bottom.max()
+            depth += 1
+            top = top.clip(depth,bottom)
+            layer = bottom > top
+        start_position = find_nearby_dot(layer,x,y)
     print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
 elif pattern.upper() == "EDGE5":
     print "TEST ANOTHER EDGE FOLLOW METHOD, ONE LAYER AT A TIME"
@@ -918,7 +917,7 @@ elif pattern.upper() == "EDGE5":
             print top.max(),"vs",bottom.max()
             depth += 1
             top = top.clip(depth,bottom)
-            layer = bottom > top    
+            layer = bottom > top
         start_position = find_nearby_dot(layer,x,y)
     print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
 elif pattern.upper() == "EDGE6":
