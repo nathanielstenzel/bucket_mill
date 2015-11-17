@@ -20,6 +20,28 @@ def test_array_bounds(array_to_test,x,y):
 def test_dot(array_to_test,x,y):
     return test_array_bounds(array_to_test,x,y) and array_to_test[y,x]
 
+def find_nearby_dot(dotmap,x,y):
+    height,width = top.shape
+    m = test_dot(dotmap,x,y)
+    if m:
+        return x,y
+    else:
+        for r in range(1,max(height,width)):
+            for offset in range(0,r+1):
+                for test in [[x-offset,y-r],
+                    [x-offset,y+r],
+                    [x+offset,y-r],
+                    [x+offset,y+r],
+                    [x+r,y+offset],
+                    [x-r,y+offset],
+                    [x+r,y-offset],
+                    [x-r,y-offset]]:
+                    m = test_dot(dotmap,test[0],test[1])
+                    if m:
+                        return test
+        r += 1
+    return None
+
 def get_direction_results(dotmap,x,y):
     results = {}
     for direction in directions:
@@ -575,64 +597,89 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
     gcode.append("G1 X0 Y0 F%f" % cut_speed)
     gcode.append("G1 Z0 F%f" % z_cut_speed)
     for cut in cuts:
+        if type(cut) == str:
+            command = "#"
+        elif type(cut[0]) == str:
+            command = cut[0]
+        else:
+            command = "dot"
+        calculated_speed = cut_speed #default to the slow cuts
         #print "CUT[0]:",cut[0]
         if cut == "seek":
             #gcode.append("#seek")
             continue
-        elif type(cut) == str and ( cut.startswith("#") or cut.startswith("(") ):
+        elif command == "#" and ( cut.startswith("#") or cut.startswith("(") ):
             gcode.append("(%s)" % cut)
             continue
-        elif cut[0] == "line":
+        elif command in ["line","line_with_stress"]: #start cut from point A and end it later in the loop
             start = cut[1]
             end = cut[2]
-            #gcode.append("#start line")
+            if end[2] <> start[2]:
+                print "Z mismatch on %s!" % cut
+
             travel = abs(start[0]-x) + abs(start[1]-y)
+            if command == "line_with_stress":
+                stress = min( cut[3] + minimum_stress, 5 )
+                calculated_speed = calculated_cut_speeds[stress]
+            else:
+                calculated_speed = cut_speed
+            #gcode.append("#start line")
             if travel > 1:
                 gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
                 gcode.append("G0 F%.3f X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
-            else:
-                gcode.append("G1 F%.3f X%.3f Y%.3f" % (cut_speed,offsets[0]+start[0],offsets[1]+start[1]))
-            if travel > 1 or start[2] != z:
                 gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
-            #else:
-            #    gcode.append("#Z was the same %s vs %s" % (start[2],z))
-            #the end position will be done below before comparing the Z
-            z = end[2]
-            cut = end
-        elif cut[0] == "line_with_stress":
-            start = cut[1]
-            end = cut[2]
-            stress = min( cut[3] + minimum_stress, 5 )
+                z = start[2]
+            elif z > start[2]: #we must go up
+                #print z,offsets[2]-cut[2]
+                gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,offsets[2]-start[2]))
+                gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                z = start[2]
+            else:
+                gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                z = start[2]
+            gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+end[0],offsets[1]+end[1]))
+            if end[2] != z:
+                gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-end[2]))
+            x,y,z = end
+        elif command == "stress_segment": #cut from the last point to this point
+            end = cut[1]
+            if end[2] <> z:
+                print "Z mismatch on %s!" % cut
+            stress = min( cut[2] + minimum_stress, 5 )
             calculated_speed = calculated_cut_speeds[stress]
             #gcode.append("#start line")
+            gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed, offsets[0]+end[0], offsets[1]+end[1]))
+            if end[2] != z:
+                gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-end[2]))
+            x,y,z = end
+        elif command in ["dot","stress_dot"]:
+            if command == "stress_dot":
+                stress = min( cut[2] + minimum_stress, 5 )
+                calculated_speed = calculated_cut_speeds[stress]
+            else:
+                calculated_speed = cut_speed
+            start = cut
             travel = abs(start[0]-x) + abs(start[1]-y)
             if travel > 1:
                 gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
                 gcode.append("G0 F%.3f X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                z = safe_distance
+            elif z > start[2]: #we must go up
+                #print z,offsets[2]-cut[2]
+                gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,offsets[2]-start[2]))
+                gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                z = start[2]
             else:
-                gcode.append("G1 F%.3f X%.3f Y%.3f (vs %.3f)" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1],cut_speed))
-            if travel > 1 or start[2] != z:
+                gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                z = start[2]
+            if z != start[2]:
                 gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
-            #else:
-            #    gcode.append("#Z was the same %s vs %s" % (start[2],z))
-            #the end position will be done below before comparing the Z
-            z = end[2]
-            cut = end
-        elif (abs(x-cut[0])+abs(y-cut[1])) > 1:
-            #print "Difference:",abs(x-cut[0]),abs(y-cut[1])
-            gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
-            z = safe_distance
-        elif z < cut[2]:
-            gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,offsets[2]-cut[2]))
-        gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+cut[0],offsets[1]+cut[1]))
-        if z != cut[2]:
-            #print z,offsets[2]-cut[2]
-            gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-cut[2]))
-        x = cut[0]
-        y = cut[1]
-        z = cut[2]
+            x,y,z = start
+        else:
+            print "UNHANDLED COMMAND: %s" % command
+            gcode.append("UNHANDLED COMMAND: %s" % command)
+        #gcode.append("(done with this command)")
     return gcode
-
 
 def convert_image_to_int8_image(input):
     height,width = input.shape
@@ -875,19 +922,19 @@ elif pattern.upper() == "EDGE6":
     depth = 0
     layer = bottom > top
     while start_position:
-        print top.max(),"vs",bottom.max()
+        #print top.max(),"vs",bottom.max()
         cut_positions = cut_positions + ["seek"]
         x,y = start_position
         #print start_position
         #print "DEBUG",layer.max() and start_position
         #while layer.max() and start_position:
-            #print "START: %s,%s,%s" % (x,y,depth), (layer==True).sum(),"to go"
+        print "START: %s,%s,%s" % (x,y,depth), (layer==True).sum(),"to go"
             #print layer.max(),layer.shape
         x,y,positions = zigzag(layer,x,y)
         for position in positions:
             cx,cy = position
             cut_positions.append([cx,cy,depth])
-        print len(positions)
+        #print len(positions)
         #print positions
         #cut_positions.append("#seek starting at %s,%s" % (x,y))
             #print layer
