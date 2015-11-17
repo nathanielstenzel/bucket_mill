@@ -12,6 +12,102 @@ except ImportError as e:
 
 directions = {"up":[0,-1],"down":[0,+1],"left":[-1,0],"right":[+1,0],"center":[0,0]}
 
+def test_array_bounds(array_to_test,x,y):
+    y_size,x_size = array_to_test.shape
+    #print "TEST",x_size,y_size,(x >= 0),(x < x_size),(y >= 0),(y < y_size)
+    return (x >= 0) and (x < x_size) and (y >= 0) and (y < y_size)
+
+def test_dot(array_to_test,x,y):
+    return test_array_bounds(array_to_test,x,y) and array_to_test[y,x]
+
+def get_direction_results(dotmap,x,y):
+    results = {}
+    for direction in directions:
+        x_delta,y_delta = directions[direction]
+        next_x = x + x_delta
+        next_y = y + y_delta
+        if test_array_bounds(dotmap,next_x,next_y):
+            results[direction] = dotmap[next_y,next_x]
+        else:
+            results[direction] = None
+    return results
+
+def next_edge(dotmap, x, y, seek=True, clockwise=True):
+    #assumes the directions in the "directions" variable is set correctly for the map
+    #if that assumption is wrong, it may go the wrong way around
+    positions = [[x,y]]
+    go = None
+    results = get_direction_results(dotmap,x,y)
+    if clockwise:
+        test_directions = ["down","left","up","right"]
+    else:
+        test_directions = ["down","right","up","left"]
+    dir_a,dir_b,dir_c,dir_d = test_directions
+    if not results[dir_a] and results[dir_b]:
+        go = dir_b
+    elif not results[dir_b] and results[dir_c]:
+        go = dir_c
+    elif not results[dir_c] and results[dir_d]:
+        go = dir_d
+    elif not results[dir_d] and results[dir_a]:
+        go = dir_a
+    elif seek:
+        for direction in results:
+            if results[direction]:
+                x_delta,y_delta = directions[direction]
+                return x+x_delta, y+y_delta
+    if not go:
+        return None
+    x_delta,y_delta = directions[go]
+    return x+x_delta, y+ y_delta
+
+def follow_edge(dotmap,x,y):
+    positions = []
+    if test_array_bounds(dotmap,x,y) and dotmap[y,x]:
+        positions.append([x,y])
+        dotmap[y,x] = False
+    position = next_edge(dotmap,x,y)
+    while position:
+        if position:
+            x,y = position
+            dotmap[y,x] = False
+        positions.append(position)
+        position = next_edge(dotmap,x,y)
+    return x,y,positions
+
+def next_zigzag(dotmap, x, y):
+    #assumes the directions in the "directions" variable is set correctly for the map
+    #if that assumption is wrong, it may go the wrong way around
+    positions = [[x,y]]
+    go = None
+    results = get_direction_results(dotmap,x,y)
+    test_directions = ["left","down","right","up"]
+    dir_a,dir_b,dir_c,dir_d = test_directions
+    if not results[dir_a] and results[dir_b] and results[dir_c]:
+        go = dir_a
+    elif not results[dir_c] and results[dir_a] or results[dir_b]:
+        go = dir_c
+    else:
+        for direction in results:
+            if results[direction]:
+                x_delta,y_delta = directions[direction]
+                return x+x_delta, y+y_delta
+    if not go:
+        return None
+    x_delta,y_delta = directions[go]
+    return x+x_delta, y+ y_delta
+
+def zigzag(dotmap,x,y):
+    positions = []
+    position = next_zigzag(dotmap,x,y)
+    while position:
+        if position:
+            x,y = position
+            dotmap[y,x] = False
+        positions.append(position)
+        position = next_zigzag(dotmap,x,y)
+    return x,y,positions
+
 def downsample_to_bit_diameter(image, scale, bit_diameter):
     #print image.shape
     height,width = image.shape
@@ -743,6 +839,65 @@ elif pattern.upper() == "EDGE4":
         #cut_positions.append("#seek starting at %s,%s" % (x,y))
         start_position = find_nearby_cut2(top,bottom,x,y)
         
+    #print "TOP\t\t\t\t\tBOTTOM"
+    #for y in range(len(top)):
+    #    print top[y],bottom[y]
+    #print "CUTS"
+    #print cut_positions
+    print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
+elif pattern.upper() == "EDGE5":
+    print "TEST ANOTHER EDGE FOLLOW METHOD, ONE LAYER AT A TIME"
+    cut_positions = []
+    layer = bottom > top
+    start_position = find_nearby_dot(layer,0,0)
+    depth = 0
+    layer = bottom > top
+    while start_position:
+        cut_positions = cut_positions + ["seek"]
+        x,y = start_position
+        #print start_position
+        x,y,positions = follow_edge(layer,x,y)
+        for position in positions:
+            cx,cy = position
+            cut_positions.append([cx,cy,depth])
+        if (layer == False).all():
+            print top.max(),"vs",bottom.max()
+            depth += 1
+            top = top.clip(depth,bottom)
+            layer = bottom > top    
+        start_position = find_nearby_dot(layer,x,y)
+    print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
+elif pattern.upper() == "EDGE6":
+    print "TEST ANOTHER EDGE FOLLOW METHOD, ONE LAYER AT A TIME"
+    cut_positions = []
+    layer = bottom > top
+    start_position = find_nearby_dot(layer,0,0)
+    depth = 0
+    layer = bottom > top
+    while start_position:
+        print top.max(),"vs",bottom.max()
+        cut_positions = cut_positions + ["seek"]
+        x,y = start_position
+        #print start_position
+        #print "DEBUG",layer.max() and start_position
+        #while layer.max() and start_position:
+            #print "START: %s,%s,%s" % (x,y,depth), (layer==True).sum(),"to go"
+            #print layer.max(),layer.shape
+        x,y,positions = zigzag(layer,x,y)
+        for position in positions:
+            cx,cy = position
+            cut_positions.append([cx,cy,depth])
+        print len(positions)
+        #print positions
+        #cut_positions.append("#seek starting at %s,%s" % (x,y))
+            #print layer
+            #print start_position
+        if (layer == False).all():
+            depth += 1
+            top = top.clip(depth,bottom)
+            layer = bottom > top
+        start_position = find_nearby_dot(layer,x,y)
+
     #print "TOP\t\t\t\t\tBOTTOM"
     #for y in range(len(top)):
     #    print top[y],bottom[y]
