@@ -43,15 +43,17 @@ def find_nearby_dot(dotmap,x,y):
     return None
 
 def get_direction_results(dotmap,x,y):
+    stress = 0
     results = {}
     for direction in directions:
         x_delta,y_delta = directions[direction]
         next_x = x + x_delta
         next_y = y + y_delta
-        if test_array_bounds(dotmap,next_x,next_y):
-            results[direction] = dotmap[next_y,next_x]
-        else:
-            results[direction] = None
+        result = results[direction] = test_dot(dotmap,next_x,next_y)
+        if result:
+            stress += 1
+    results["overall"] = stress != 0
+    results["stress"] = stress
     return results
 
 def next_edge(dotmap, x, y, seek=True, clockwise=True):
@@ -74,14 +76,14 @@ def next_edge(dotmap, x, y, seek=True, clockwise=True):
     elif not results[dir_d] and results[dir_a]:
         go = dir_a
     elif seek:
-        for direction in results:
+        for direction in test_directions:
             if results[direction]:
                 x_delta,y_delta = directions[direction]
-                return x+x_delta, y+y_delta
+                return x+x_delta, y+y_delta, results["stress"]
     if not go:
         return None
     x_delta,y_delta = directions[go]
-    return x+x_delta, y+ y_delta
+    return x+x_delta, y+ y_delta, results["stress"]
 
 def follow_edge(dotmap,x,y):
     positions = []
@@ -91,7 +93,7 @@ def follow_edge(dotmap,x,y):
     position = next_edge(dotmap,x,y)
     while position:
         if position:
-            x,y = position
+            x,y,stress = position
             dotmap[y,x] = False
         positions.append(position)
         position = next_edge(dotmap,x,y)
@@ -603,6 +605,7 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
             command = cut[0]
         else:
             command = "dot"
+            cut = ["dot",cut]
         calculated_speed = cut_speed #default to the slow cuts
         #print "CUT[0]:",cut[0]
         if cut == "seek":
@@ -658,7 +661,7 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
                 calculated_speed = calculated_cut_speeds[stress]
             else:
                 calculated_speed = cut_speed
-            start = cut
+            start = cut[1]
             travel = abs(start[0]-x) + abs(start[1]-y)
             if travel > 1:
                 gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
@@ -905,8 +908,12 @@ elif pattern.upper() == "EDGE5":
         #print start_position
         x,y,positions = follow_edge(layer,x,y)
         for position in positions:
-            cx,cy = position
-            cut_positions.append([cx,cy,depth])
+            if len(position) == 3:
+                cx,cy,stress = position
+                cut_positions.append(["stress_dot",[cx,cy,depth],stress])
+            else:
+                cx,cy = position
+                cut_positions.append(["dot",[cx,cy,depth]])
         if (layer == False).all():
             print top.max(),"vs",bottom.max()
             depth += 1
