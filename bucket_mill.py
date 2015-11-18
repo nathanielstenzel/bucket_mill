@@ -478,14 +478,17 @@ def follow_edge4(layer,xin,yin,this_depth):
         measure = get_direction_results(layer,x,y)
         if not measure["overall"]:
             #print "BACKTRACING!"
+            backtrack = []
             for dot in save_points:
                 testx,testy,testz = dot #testz is not used
                 measure = get_direction_results(layer,testx,testy)
+                backtrack.append(dot)
                 if measure["overall"]:
                     #print "BACKED UP to %s" % dot
                     positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], last_stress ])
-                    positions.append("#BACK UP to %s" % dot)
-                    positions.append(["line_with_stress", pending_positions[-1],dot,0]) #no stress because we are just retracing our steps
+                    #positions.append("#BACK UP to %s" % dot)
+                    for bt in backtrack:
+                        positions.append(["stress_dot",bt,0]) #no stress because we are just retracing our steps
                     pending_positions = [dot]
                     x,y = testx,testy
                     alt = last_directions.pop(-2)
@@ -706,7 +709,13 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
             print "UNHANDLED COMMAND: %s" % command
             gcode.append("UNHANDLED COMMAND: %s" % command)
         #gcode.append("(done with this command)")
-    return gcode
+    deduped_gcode = []
+    last_line = ""
+    for line in gcode:
+        if line != last_line:
+            deduped_gcode.append(line)
+        last_line = line
+    return deduped_gcode
 
 def convert_image_to_int8_image(input):
     height,width = input.shape
@@ -907,7 +916,7 @@ elif pattern.upper() == "EDGE4":
     depth = 0
     layer = bottom > top
     while start_position:
-        cut_positions = cut_positions + ["seek"]
+        #cut_positions = cut_positions + ["#seek"]
         x,y = start_position
         #print start_position
         #print "%i to go" % (layer == False).sum()
