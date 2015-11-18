@@ -42,6 +42,43 @@ def find_nearby_dot(dotmap,x,y):
         r += 1
     return None
 
+def seek_dot_on_z(dotmap,p1,p2,this_depth):
+    x1,y1 = p1
+    x2,y2 = p2
+    y1_horizontal_move = True
+    y2_horizontal_move = True
+    x1_vertical_move = True
+    x2_vertical_move = True
+    #print "Testing %s to %s" % (p1,p2)
+    if not test_dot(dotmap,x2,y2):
+        #print "failed x2,y2"
+        return None
+    if x1 < x2:
+        xstep = 1
+    else:
+        xstep = -1
+    if y1 < y2:
+        ystep = 1
+    else:
+        ystep = -1
+    for x in range(x1,x2,xstep):
+        y1_horizontal_move = y1_horizontal_move and test_dot(dotmap,x,y1)
+        y2_horizontal_move = y2_horizontal_move and test_dot(dotmap,x,y2)
+    for y in range(y1,y2,ystep):
+        x1_vertical_move = x1_vertical_move and test_dot(dotmap,x1,y)
+        x2_vertical_move = x2_vertical_move and test_dot(dotmap,x2,y)
+    positions = []
+    #print x1_vertical_move,x2_vertical_move,y1_horizontal_move,y2_horizontal_move
+    if x1_vertical_move and y2_horizontal_move:
+        positions.append([ "line",[x1,y1,this_depth],[x1,y2,this_depth] ])
+        positions.append([ "line",[x1,y2,this_depth],[x2,y2,this_depth] ])
+    elif x2_vertical_move and y1_horizontal_move:
+        positions.append([ "line",[x1,y1,this_depth],[x2,y1,this_depth] ])
+        positions.append([ "line",[x2,y1,this_depth],[x2,y2,this_depth] ])
+    #print positions
+    travel = abs(x1-x2) + abs(y1-y2)
+    return positions
+
 def get_direction_results(dotmap,x,y):
     stress = 0
     results = {}
@@ -501,8 +538,7 @@ def follow_edge4(layer,xin,yin,this_depth):
         #positions.append("#add pending positions")
         positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], last_stress ])
         #positions = positions + pending_positions
-        x = pending_positions[-1][0]
-        y = pending_positions[-1][1]
+        x,y,z = pending_positions[-1] #discard the z
         #positions.append("#line %s to %s" % (pending_positions[0],pending_positions[-1]))
     #positions.append("#ending at %s,%s" % (x,y))
     return x,y,positions
@@ -923,11 +959,20 @@ elif pattern.upper() == "EDGE4":
         x,y,positions = follow_edge4(layer,x,y,depth)
         cut_positions = cut_positions + positions
         if (layer == False).all():
-            print top.max(),"vs",bottom.max()
+            print depth,"vs",bottom.max()
             depth += 1
             top = top.clip(depth,bottom)
             layer = bottom > top
-        start_position = find_nearby_dot(layer,x,y)
+            start_position = find_nearby_dot(layer,x,y)
+        else:
+            start_position = find_nearby_dot(layer,x,y)
+            if True: #I want to be able to turn this on and off for testing
+                seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
+                if seek:
+                    #print "SEEK ON Z!"
+                    cut_positions = cut_positions + seek
+                #else:
+                    #print "FAIL SEEK IN Z!"
     print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
 elif pattern.upper() == "EDGE5":
     print "TEST ANOTHER EDGE FOLLOW METHOD, ONE LAYER AT A TIME"
@@ -953,7 +998,16 @@ elif pattern.upper() == "EDGE5":
             depth += 1
             top = top.clip(depth,bottom)
             layer = bottom > top
-        start_position = find_nearby_dot(layer,x,y)
+            start_position = find_nearby_dot(layer,x,y)
+        else:
+            start_position = find_nearby_dot(layer,x,y)
+            if True: #I want to be able to turn this on and off for testing
+                seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
+                if seek:
+                    #print "SEEK ON Z!"
+                    cut_positions = cut_positions + seek
+                #else:
+                    #print "FAIL SEEK IN Z!"
     print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
 elif pattern.upper() == "EDGE6":
     print "TEST ANOTHER EDGE FOLLOW METHOD, ONE LAYER AT A TIME"
