@@ -18,7 +18,9 @@ def test_array_bounds(array_to_test,x,y):
     return (x >= 0) and (x < x_size) and (y >= 0) and (y < y_size)
 
 def test_dot(array_to_test,x,y):
-    return test_array_bounds(array_to_test,x,y) and array_to_test[y,x]
+    if not test_array_bounds(array_to_test,x,y):
+        return None
+    return array_to_test[y,x]
 
 def find_nearby_dot(dotmap,x,y):
     height,width = top.shape
@@ -122,7 +124,7 @@ def next_edge(dotmap, x, y, seek=True, clockwise=True):
     x_delta,y_delta = directions[go]
     return x+x_delta, y+ y_delta, results["stress"]
 
-def follow_edge(dotmap,x,y):
+def trace(dotmap,x,y):
     positions = []
     if test_array_bounds(dotmap,x,y) and dotmap[y,x]:
         positions.append([x,y])
@@ -136,334 +138,7 @@ def follow_edge(dotmap,x,y):
         position = next_edge(dotmap,x,y)
     return x,y,positions
 
-def next_zigzag(dotmap, x, y):
-    #assumes the directions in the "directions" variable is set correctly for the map
-    #if that assumption is wrong, it may go the wrong way around
-    positions = [[x,y]]
-    go = None
-    results = get_direction_results(dotmap,x,y)
-    test_directions = ["left","down","right","up"]
-    dir_a,dir_b,dir_c,dir_d = test_directions
-    if not results[dir_a] and results[dir_b] and results[dir_c]:
-        go = dir_a
-    elif not results[dir_c] and results[dir_a] or results[dir_b]:
-        go = dir_c
-    else:
-        for direction in results:
-            if results[direction]:
-                x_delta,y_delta = directions[direction]
-                return x+x_delta, y+y_delta
-    if not go:
-        return None
-    x_delta,y_delta = directions[go]
-    return x+x_delta, y+ y_delta
-
-def zigzag(dotmap,x,y):
-    positions = []
-    position = next_zigzag(dotmap,x,y)
-    while position:
-        if position:
-            x,y = position
-            dotmap[y,x] = False
-        positions.append(position)
-        position = next_zigzag(dotmap,x,y)
-    return x,y,positions
-
-def downsample_to_bit_diameter(image, scale, bit_diameter):
-    #print image.shape
-    height,width = image.shape
-    scaled_width = width*scale
-    scaled_height = height*scale
-    output = zeros((scaled_height,scaled_width),dtype=integer)
-    #coordinates are height,width
-    #print "output is %s" % str(output.shape)
-    print "target width, target height, scale = ",scaled_width,scaled_height,scale
-    #print "downsample_to_bit_diamter width=%i height=%i" % (width,height)
-    #print "downsample_to_bit_diameter shape:", output.shape
-    #print len(image[::bit_diameter,::bit_diameter].tolist()[0])
-    #help(searchsorted)
-    #scale
-    for y in range(int(scaled_height)):
-        for x in range(int(scaled_width)):
-            #print "%s:%s,%s:%s = %s" % ( (y)/scale,(y+bit_diameter)/scale,x/scale,(x+bit_diameter)/scale,amax(image[(y)/scale:(y+bit_diameter)/scale,x/scale:(x+bit_diameter)/scale]))
-            left = max( (x-bit_diameter/2)/scale,  0)
-            right = min( (x+bit_diameter/2)/scale,  width)
-            top = max( (y-bit_diameter/2)/scale, 0)
-            bottom = min( (y+bit_diameter/2)/scale, height)
-            output[y,x] = amax(image[top:bottom,left:right])
-    #print "downsample_to_bit_diameter shape:", output.shape
-    return output
-
-
-def downsample(image, image_x_axis, image_y_axis, x_bounds, y_bounds, x_resolution, y_resolution):
-    x_resolution, y_resolution = int(round(x_resolution)), int(round(y_resolution))
-    x_bounds = np.searchsorted(image_x_axis, x_bounds)
-    y_bounds = np.searchsorted(image_y_axis, y_bounds)
-    #y_bounds = image.shape[0] + 1 - y_bounds[::-1]
-    subset = image[y_bounds[0]:y_bounds[1], x_bounds[0]:x_bounds[1]]
-    x_downsample_factor = max(round(subset.shape[1] / x_resolution / 3.), 1)
-    y_downsample_factor = max(round(subset.shape[0] / y_resolution / 3.), 1)
-    subset = subset[::y_downsample_factor,::x_downsample_factor]
-    image = scipy.misc.imresize(subset, (y_resolution,x_resolution), interp='nearest')
-    bounds = image_x_axis[x_bounds[0]:x_bounds[1]]
-    dw = np.max(bounds) - np.min(bounds)
-    bounds = image_y_axis[y_bounds[0]:y_bounds[1]]
-    dh = np.max(bounds) - np.min(bounds)
-    return {'data': image,
-            'offset_x': image_x_axis[x_bounds[0]],
-            'offset_y': image_y_axis[y_bounds[0]],
-            'dw': dw,
-            'dh': dh,
-            'subset': subset,
-    }
-
-
-def make_top(bottom):
-    return zeros(bottom.shape,dtype=integer)
-
-def test_xy(top,bottom,x,y):
-    #print "x: %i\ty: %i" % (x,y)
-    height,width = top.shape
-    if x >= 0 and y >= 0 and y < height and x < width:
-        #print bottom[x,y],top[x,y],bottom[x,y] - top[x,y]
-        try:
-            result = bottom[y,x] - top[y,x]
-        except:
-            result = None
-    else:
-        result = None
-    #if result:
-    #    print "RESULT:",x,y,result
-    return result
-
-def scan_column(top,bottom,y):
-    #so damned slow
-    x=0
-    positions = []
-    debug = False
-    height,width = top.shape
-    #print test_xy(top,bottom,10,10)
-    while x < width and x >= 0:
-        depth = test_xy(top,bottom,x,y)
-        #print top[x,y],bottom[x,y],depth
-        if depth:
-            if debug: print "POSITION: %s" % x
-            top[x,y] += 1
-            positions.append([x,y,top[y,x]])
-        l_depth = test_xy(top,bottom,x-1,y)
-        r_depth = test_xy(top,bottom,x+1,y)
-        if r_depth == None and l_depth != None and l_depth > 0:
-            if debug: print "LEFT"
-            x -= 1
-        elif depth <= 1 and l_depth != None and l_depth > 0:
-            if debug: print "LEFT"
-            x -= 1
-        elif depth and not r_depth:
-            if debug: print "STAY"
-        else:
-            if debug: print "RIGHT"
-            x += 1
-    return positions
-
-def test_multi_xy(top,bottom,x,y):
-    measure = {"up":0,"down":0,"left":0,"right":0,"center":0}
-    measure_total = 0
-    for direction in directions:
-        offset = directions[direction]
-        m = test_xy(top,bottom,x+offset[0],y+offset[1])
-        if m != None:
-            measure_total += m
-            measure[direction] = m
-    measure["overall"] = measure_total
-    return measure
-
-def test_multi_xy_matching_depth(top,bottom,x,y,depth,test_depth_vs_top=True):
-    height,width = top.shape
-    measure = {}
-    overall = False
-    stress = 0
-    for direction in directions:
-        offset = directions[direction]
-        try:
-            test_y = y+offset[1]
-            test_x = x+offset[0]
-            if test_y >= 0 and test_x >= 0 and test_y < height and test_x < width:
-                top_measure = top[test_y,test_x]
-                bottom_measure = bottom[y+offset[1],x+offset[0]]
-                if test_depth_vs_top:
-                    measure[direction] = (bottom_measure >= depth) and (depth > top_measure)
-                    if measure[direction]: stress += 1
-                else:
-                    measure[direction] = (bottom_measure >= depth) and (bottom_measure > top_measure)
-                    if measure[direction]: stress += 1
-            else:
-                measure[direction] = None
-            #print direction,bottom_measure,depth,top_measure,(bottom_measure >= depth),(depth > top_measure)
-            if measure[direction]:
-                overall = True
-        except:
-            measure[direction] = False
-    measure["overall"] = overall
-    measure["stress"] = stress
-    return measure
-
-def follow_edge1(top,bottom,nx,ny):
-    x = nx
-    y = ny
-    #something is wrong with this....
-    positions = []
-    pending_positions = []
-    dir = 0
-    last_dir = 0
-    measure = test_multi_xy(top,bottom,x,y)
-    direction_keys = ["up","right","down","left","center"]
-    while measure["overall"]:
-        #print measure
-        if measure["center"]:
-            top[y,x] += 1
-            if last_dir != dir:
-                positions.append([ "line", pending_positions[0], pending_positions[-1] ])
-                #print [ "line", pending_positions[0], pending_positions[-1] ]
-                pending_positions = []
-            pending_positions.append([x,y,top[y,x]])
-            #print "APPEND",[x,y,top[y][x]]
-        last_dir = dir
-        #print "%s,%s,%s while bottom is %s" % (x,y,top[y][x],bottom[y][x])
-        found = False
-        #print "at %s,%s and facing %s with cutting = %s" % (x,y,direction_keys[dir],measure["center"])
-        while not found:
-            direction = direction_keys[dir]
-            #print direction,measure[direction]
-            if direction == "center":
-                dir = 0
-                direction = "up"
-                found = True
-            if measure[direction]:
-                x += directions[direction][0]
-                y += directions[direction][1]
-                found = True
-                if direction == "center":
-                    dir = 0
-            else:
-                dir += 1
-                if direction == "center":
-                    found = True #but not really
-        measure = test_multi_xy(top,bottom,x,y)
-    if pending_positions:
-        #positions.append("#add pending positions")
-        positions.append([ "line", pending_positions[0], pending_positions[-1] ])
-        x = pending_positions[-1][0]
-        y = pending_positions[-1][1]
-        #positions.append("#line %s to %s" % (pending_positions[0],pending_positions[-1]))
-    #positions.append("#ending at %s,%s" % (x,y))
-    return top,positions,x,y
-
-def follow_edge2(top,bottom,x,y):
-    positions = []
-    pending_positions = []
-    dir = 0
-    last_dir = 0
-    direction="up"
-    direction_keys = ["up","right","down","left","center"]
-    depth = top[y,x]+1
-    measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
-    #print "A",measure
-    while measure["overall"]:
-        #print "B",measure
-        if measure["center"]:
-            top[y,x] += 1
-            if last_dir != dir or direction == "center":
-                positions.append([ "line", pending_positions[0], pending_positions[-1] ])
-                #print [ "line", pending_positions[0], pending_positions[-1] ]
-                pending_positions = []
-            pending_positions.append([x,y,top[y,x]])
-        #print "APPEND",[x,y,top[y][x]]
-        last_dir = dir
-        found = False
-        while not found:
-            direction = direction_keys[dir]
-            #print direction,measure[direction]
-            if direction == "center":
-                dir = 0
-                direction = "up"
-                found = True
-            if measure[direction]:
-                x += directions[direction][0]
-                y += directions[direction][1]
-                found = True
-                if direction == "center":
-                    dir = 0
-            else:
-                dir += 1
-                if direction == "center":
-                    found = True #but not really
-        measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
-        if not measure["overall"]:
-            depth += 1
-        measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
-    if pending_positions:
-        positions.append([ "line", pending_positions[0], pending_positions[-1] ])
-        x = pending_positions[-1][0]
-        y = pending_positions[-1][1]
-    return top,positions,x,y
-
-def follow_edge3(top,bottom,x,y):
-    positions = []
-    pending_positions = []
-    max_stress = 0
-    direction = last_dir = "left"
-    left = False
-    up = False
-    horizontal = True
-    depth = top[y,x]+1
-    measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
-    #print "A",measure
-    while measure["overall"]:
-        #print "B",measure
-        left = True
-        up = True
-        if measure["center"]:
-            depth = top[y,x]+1
-            top[y][x] += 1
-            if last_dir != direction:
-                positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
-                #print [ "line", pending_positions[0], pending_positions[-1] ]
-                pending_positions = []
-                max_stress = 0
-            pending_positions.append([x,y,top[y,x]])
-            max_stress = max(max_stress,measure["stress"])
-            #print "APPEND",[x,y,top[y][x]],measure["stress"]
-        last_dir = direction
-        if measure["left"]:
-            direction = "left"
-        elif measure["right"]:
-            direction = "right"
-        elif measure["up"]:
-            direction = "up"
-        elif measure["down"]:
-            direction = "down"
-        else:
-            while not measure["overall"]:
-                depth += 1
-                measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
-            if measure["left"]:
-                direction = "left"
-            elif measure["right"]:
-                direction = "right"
-            elif measure["up"]:
-                direction = "up"
-            elif measure["down"]:
-                direction = "down"
-        x += directions[direction][0]
-        y += directions[direction][1]
-        measure = test_multi_xy_matching_depth(top,bottom,x,y,depth)
-    if pending_positions:
-        positions.append([ "line_with_stress", pending_positions[0], pending_positions[-1], max_stress ])
-        x = pending_positions[-1][0]
-        y = pending_positions[-1][1]
-    return top,positions,x,y
-
-def follow_edge4(layer,xin,yin,this_depth):
+def zigzag(layer,xin,yin,this_depth):
     x = xin
     y = yin
     positions = []
@@ -543,98 +218,57 @@ def follow_edge4(layer,xin,yin,this_depth):
     #positions.append("#ending at %s,%s" % (x,y))
     return x,y,positions
 
-def find_nearby_cut(top,bottom,x,y):
-    valid = False
-    m = test_xy(top,bottom,x,y)
-    #print x,y,m
-    if m != None:
-        if m > 0:
-            return x,y
-    r = 1
-    valid = True
-    while valid:
-        valid = False
-        for offset in range(-r,r+1):
-            #print r,offset
-            m = test_xy(top,bottom,x+offset,y-r)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x+offset,y-r
-            m = test_xy(top,bottom,x+offset,y+r)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x+offset,y+r
-            m = test_xy(top,bottom,x+r,y+offset)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x+r,y+offset
-            m = test_xy(top,bottom,x-r,y+offset)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x-r,y+offset
-        r += 1
-    return None
+def downsample_to_bit_diameter(image, scale, bit_diameter):
+    #print image.shape
+    height,width = image.shape
+    scaled_width = width*scale
+    scaled_height = height*scale
+    output = zeros((scaled_height,scaled_width),dtype=integer)
+    #coordinates are height,width
+    #print "output is %s" % str(output.shape)
+    print "target width, target height, scale = ",scaled_width,scaled_height,scale
+    #print "downsample_to_bit_diamter width=%i height=%i" % (width,height)
+    #print "downsample_to_bit_diameter shape:", output.shape
+    #print len(image[::bit_diameter,::bit_diameter].tolist()[0])
+    #help(searchsorted)
+    #scale
+    for y in range(int(scaled_height)):
+        for x in range(int(scaled_width)):
+            #print "%s:%s,%s:%s = %s" % ( (y)/scale,(y+bit_diameter)/scale,x/scale,(x+bit_diameter)/scale,amax(image[(y)/scale:(y+bit_diameter)/scale,x/scale:(x+bit_diameter)/scale]))
+            left = max( (x-bit_diameter/2)/scale,  0)
+            right = min( (x+bit_diameter/2)/scale,  width)
+            top = max( (y-bit_diameter/2)/scale, 0)
+            bottom = min( (y+bit_diameter/2)/scale, height)
+            output[y,x] = amax(image[top:bottom,left:right])
+    #print "downsample_to_bit_diameter shape:", output.shape
+    return output
 
-def find_nearby_cut2(top,bottom,x,y):
-    height,width = top.shape
-    valid = False
-    m = test_xy(top,bottom,x,y)
-    #print x,y,m
-    if m != None:
-        if m > 0:
-            return x,y
-    r = 1
-    valid = True
-    while valid:
-        valid = False
-        for offset in range(0,r+1):
-            #print r,offset
-            m = test_xy(top,bottom,x-offset,y-r)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x-offset,y-r
-            m = test_xy(top,bottom,x-offset,y+r)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x-offset,y+r
-            m = test_xy(top,bottom,x+offset,y-r)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x+offset,y-r
-            m = test_xy(top,bottom,x+offset,y+r)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x+offset,y+r
-            m = test_xy(top,bottom,x+r,y+offset)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x+r,y+offset
-            m = test_xy(top,bottom,x-r,y+offset)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x-r,y+offset
-            m = test_xy(top,bottom,x+r,y-offset)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x+r,y-offset
-            m = test_xy(top,bottom,x-r,y-offset)
-            if m != None:
-                valid = True
-                if m > 0:
-                    return x-r,y-offset
-        r += 1
-    return None
+
+def downsample(image, image_x_axis, image_y_axis, x_bounds, y_bounds, x_resolution, y_resolution):
+    x_resolution, y_resolution = int(round(x_resolution)), int(round(y_resolution))
+    x_bounds = np.searchsorted(image_x_axis, x_bounds)
+    y_bounds = np.searchsorted(image_y_axis, y_bounds)
+    #y_bounds = image.shape[0] + 1 - y_bounds[::-1]
+    subset = image[y_bounds[0]:y_bounds[1], x_bounds[0]:x_bounds[1]]
+    x_downsample_factor = max(round(subset.shape[1] / x_resolution / 3.), 1)
+    y_downsample_factor = max(round(subset.shape[0] / y_resolution / 3.), 1)
+    subset = subset[::y_downsample_factor,::x_downsample_factor]
+    image = scipy.misc.imresize(subset, (y_resolution,x_resolution), interp='nearest')
+    bounds = image_x_axis[x_bounds[0]:x_bounds[1]]
+    dw = np.max(bounds) - np.min(bounds)
+    bounds = image_y_axis[y_bounds[0]:y_bounds[1]]
+    dh = np.max(bounds) - np.min(bounds)
+    return {'data': image,
+            'offset_x': image_x_axis[x_bounds[0]],
+            'offset_y': image_y_axis[y_bounds[0]],
+            'dw': dw,
+            'dh': dh,
+            'subset': subset,
+    }
+
+
+def make_top(bottom):
+    return zeros(bottom.shape,dtype=integer)
 
 def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed=400, rapid_speed=700, safe_distance=2,unit="mm",offsets=[0,0,0],minimum_stress=1):
     #if the next cut location is more than one space away, go to safe_distance before moving
@@ -761,294 +395,168 @@ def convert_image_to_int8_image(input):
         for y in range(height):
             output[x,y] = int(input[x,y])
     return output
-    
-#cut_image = Image.open("Best Mom Ever Heart3.gif")
 
-if len(argv) < 7:
-    print 'USAGE: python bucket_mill.py "Best Mom Ever Heart3.gif" W 200 20 3 edge1 test.gcode'
-    print 'input file = "Best Mom Ever Heart3.gif"' #argv[1]
-    print 'W or H or Width or Height = "W"' #argv[2]
-    print 'measurement in mm of width or height as selected above = "200"' #argv[3]
-    print 'measurement in mm of the target thickness = "20"' #argv[4]
-    print 'measurement in mm of billing bit = "3"' #argv[5]
-    print 'milling pattern to use (scan or edge1 or edge2 or edge3) = "edge1"' #argv[6]
-    print 'optionally defines output gcode file = "test.gcode". Note that it is otherwise the input file + ".rough-cut.gcode"' #argv[7]
+if __name__ == "__main__":
+    #cut_image = Image.open("Best Mom Ever Heart3.gif")
 
-input_file = argv[1]
-dimension_restricted = argv[2]
-dimension_measurement = argv[3]
-thickness = argv[4]
-bit_diameter = argv[5]
-pattern = argv[6]
-output_filename = argv[1].rsplit(".")[0] + ".rough-cut.gcode"
-if len(argv) == 8:
-    output_filename = argv[7]
-output_file = open(output_filename, "w")
+    if len(argv) < 7:
+        print 'USAGE: python bucket_mill.py "Best Mom Ever Heart3.gif" W 200 20 3 trace test.gcode'
+        print 'input file = "Best Mom Ever Heart3.gif"' #argv[1]
+        print 'W or H or Width or Height = "W"' #argv[2]
+        print 'measurement in mm of width or height as selected above = "200"' #argv[3]
+        print 'measurement in mm of the target thickness = "20"' #argv[4]
+        print 'measurement in mm of billing bit = "3"' #argv[5]
+        print 'milling pattern to use (trace or zigzag) = "trace"' #argv[6]
+        print 'optionally defines output gcode file = "test.gcode". Note that it is otherwise the input file + ".rough-cut.gcode"' #argv[7]
 
-print "input file: %s" % input_file
-print "dimension_restricted: %s" % dimension_restricted
-print "dimension_measurement: %s" % dimension_measurement
-print "thickness: %s" % thickness
-print "bit diameter: %s" % bit_diameter
-print "pattern: %s" % pattern
-print "output file name: %s" % output_filename
+    input_file = argv[1]
+    dimension_restricted = argv[2]
+    dimension_measurement = argv[3]
+    thickness = argv[4]
+    bit_diameter = argv[5]
+    pattern = argv[6]
+    output_filename = argv[1].rsplit(".")[0] + ".rough-cut.gcode"
+    if len(argv) == 8:
+        output_filename = argv[7]
+    output_file = open(output_filename, "w")
 
-cut_image = Image.open(input_file)
-cut_image.convert("L") # Convert image to grayscale
+    print "input file: %s" % input_file
+    print "dimension_restricted: %s" % dimension_restricted
+    print "dimension_measurement: %s" % dimension_measurement
+    print "thickness: %s" % thickness
+    print "bit diameter: %s" % bit_diameter
+    print "pattern: %s" % pattern
+    print "output file name: %s" % output_filename
 
-cut_image = cut_image.transpose(Image.FLIP_TOP_BOTTOM) #The bottom left is 0,0 in the CNC, but the upper left is 0,0 in the image
+    cut_image = Image.open(input_file)
+    cut_image.convert("L") # Convert image to grayscale
 
-width, height = cut_image.size
-#help(cut_image)
-#print cut_image.tobytes()
-print len(cut_image.getdata())
-print "cut image width,height,overall size:",width,height,width*height
-x=0
+    cut_image = cut_image.transpose(Image.FLIP_TOP_BOTTOM) #The bottom left is 0,0 in the CNC, but the upper left is 0,0 in the image
 
-row = []
+    width, height = cut_image.size
+    #help(cut_image)
+    #print cut_image.tobytes()
+    print len(cut_image.getdata())
+    print "cut image width,height,overall size:",width,height,width*height
+    x=0
 
-bottom = array(cut_image)
-print "bottom shape:",bottom.shape
-shape = (None,None)
-#print bottom.tolist()[100]
-if dimension_restricted.upper() in ["W","WIDTH"]:
-    bottom = downsample_to_bit_diameter(bottom,float(dimension_measurement)/width,int(bit_diameter))
-    print "scale = %s" % (float(dimension_measurement)/width)
-elif dimension_restricted.upper() in ["H","HEIGHT"]:
-    bottom = downsample_to_bit_diameter(bottom,float(dimension_measurement)/height,int(bit_diameter))
-    print "scale = %s" % (float(dimension_measurement)/height)
+    row = []
 
-print "min-max before:",bottom.min(),bottom.max()
-#print bottom.tolist()[10]
-bottom = int(thickness) -1 - bottom * int(thickness) / 256
-print "min-max after:",bottom.min(),bottom.max()
-#bottom = convert_image_to_int8_image(bottom)
-#bottom.dtype = int8
-print "target shape:",shape
-print "bottom shape:",bottom.shape
-#for row in bottom.tolist():
-#    print row
+    bottom = array(cut_image)
+    print "bottom shape:",bottom.shape
+    shape = (None,None)
+    #print bottom.tolist()[100]
+    if dimension_restricted.upper() in ["W","WIDTH"]:
+        bottom = downsample_to_bit_diameter(bottom,float(dimension_measurement)/width,int(bit_diameter))
+        print "scale = %s" % (float(dimension_measurement)/width)
+    elif dimension_restricted.upper() in ["H","HEIGHT"]:
+        bottom = downsample_to_bit_diameter(bottom,float(dimension_measurement)/height,int(bit_diameter))
+        print "scale = %s" % (float(dimension_measurement)/height)
 
-top = make_top(bottom)
-print "THE TOP IS MADE"
-#for row in top.tolist():
-#    print row
-print "bottom shape:",bottom.shape, "top shape:",top.shape
-print "test shape:",shape
-
-#exit()
-#help(bottom)
-#print dir(bottom)
-
-#print bottom.tolist()
-#imsave("test.jpg",bottom)
-#exit()
-
-#print bottom.tolist()
-#help(bottom)
-
-#top = imresize(bottom,(225,210)) #in this way, we can scale down the image quickly to the dimensions in milimeters
-#print top.tolist()
-#exit()
-
-cut_positions = []
-
-if pattern.upper() == "SCAN":
-    print "TEST ONE COLUMN AT A TIME"
-    cut_positions = []
-    total_cuts = 0
-    for y in range(height):    
-        print "scanning column %i" % y
-        new_positions = scan_column(top,bottom,y)
-        #cut_positions_by_row.append(new_positions)
-        cut_positions = cut_positions + new_positions
-        total_cuts += len(new_positions)
-        #print new_positions
-
-    #print cut_positions
-
-    #print "TOP\t\t\t\t\tBOTTOM"
-    #for row in top.tolist():
+    print "min-max before:",bottom.min(),bottom.max()
+    #print bottom.tolist()[10]
+    bottom = int(thickness) -1 - bottom * int(thickness) / 256
+    print "min-max after:",bottom.min(),bottom.max()
+    #bottom = convert_image_to_int8_image(bottom)
+    #bottom.dtype = int8
+    print "target shape:",shape
+    print "bottom shape:",bottom.shape
+    #for row in bottom.tolist():
     #    print row
 
-    print "CUTS"
-    #for y in range(height):
-    #    total_cuts += len(cut_positions_by_row[y])
-    #    cuts_removed_from_rows = cuts_removed_from_rows + cut_positions[y]
-        #print cut_positions[y]
-    
-    print "We had %i cuts." % total_cuts
+    top = make_top(bottom)
+    print "THE TOP IS MADE"
+    #for row in top.tolist():
+    #    print row
+    print "bottom shape:",bottom.shape, "top shape:",top.shape
+    print "test shape:",shape
 
-elif pattern.upper() == "EDGE1":
-    print
-    print "TEST AN EDGE FOLLOW METHOD"
-    cut_positions = []
-    start_position = find_nearby_cut2(top,bottom,0,0)
-    print "Start position:",start_position
-    while start_position:
-        cut_positions = cut_positions + ["seek"]
-        x,y = start_position
-        #cut_positions.append("#start at %s,%s" % (x,y))
-        top,new_cuts,x,y = follow_edge1(top,bottom,x,y)
-        cut_positions = cut_positions + new_cuts
-        #cut_positions.append("#seek starting at %s,%s" % (x,y))
-        start_position = find_nearby_cut2(top,bottom,x,y)
-        
-        
-    #print "TOP\t\t\t\t\tBOTTOM"
-    #for y in range(len(top)):
-    #    print top[y],bottom[y]
-    print "CUTS"
-    #for i in range(20):
-    #    print cut_positions[i]
-    print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
-    print
+    #exit()
+    #help(bottom)
+    #print dir(bottom)
 
-elif pattern.upper() == "EDGE2":
-    print "TEST ANOTHER EDGE FOLLOW METHOD, BUT WITH DEPTH MATCHING"
-    cut_positions = []
-    start_position = find_nearby_cut2(top,bottom,0,0)
-    print start_position
-    while start_position:
-        cut_positions = cut_positions + ["seek"]
-        x,y = start_position
-        #print start_position
-        top,new_cuts,x,y = follow_edge2(top,bottom,x,y)
-        cut_positions = cut_positions + new_cuts
-        start_position = find_nearby_cut2(top,bottom,x,y)
-        
-    #print "TOP\t\t\t\t\tBOTTOM"
-    #for y in range(len(top)):
-    #    print top[y],bottom[y]
-    #print "CUTS"
-    #print cut_positions
-    print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
+    #print bottom.tolist()
+    #imsave("test.jpg",bottom)
+    #exit()
 
-elif pattern.upper() == "EDGE3":
-    print "TEST ANOTHER EDGE FOLLOW METHOD, BUT WITH DEPTH MATCHING"
-    cut_positions = []
-    start_position = find_nearby_cut2(top,bottom,0,0)
-    print start_position
-    while start_position:
-        cut_positions = cut_positions + ["seek"]
-        x,y = start_position
-        #print start_position
-        top,new_cuts,x,y = follow_edge3(top,bottom,x,y)
-        cut_positions = cut_positions + new_cuts
-        start_position = find_nearby_cut2(top,bottom,x,y)
-        
-    #print "TOP\t\t\t\t\tBOTTOM"
-    #for y in range(len(top)):
-    #    print top[y],bottom[y]
-    #print "CUTS"
-    #print cut_positions
-    print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
+    #print bottom.tolist()
+    #help(bottom)
 
-elif pattern.upper() == "EDGE4":
-    print "ZIGZAG ONE LAYER AT A TIME"
+    #top = imresize(bottom,(225,210)) #in this way, we can scale down the image quickly to the dimensions in milimeters
+    #print top.tolist()
+    #exit()
+
     cut_positions = []
-    layer = bottom > top
-    start_position = find_nearby_dot(layer,0,0)
-    depth = 0
-    layer = bottom > top
-    while start_position:
-        #cut_positions = cut_positions + ["#seek"]
-        x,y = start_position
-        #print start_position
-        #print "%i to go" % (layer == False).sum()
-        x,y,positions = follow_edge4(layer,x,y,depth)
-        cut_positions = cut_positions + positions
-        if (layer == False).all():
-            print depth,"vs",bottom.max()
-            depth += 1
-            top = top.clip(depth,bottom)
-            layer = bottom > top
-            start_position = find_nearby_dot(layer,x,y)
-        else:
-            start_position = find_nearby_dot(layer,x,y)
-            if True: #I want to be able to turn this on and off for testing
-                seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
-                if seek:
-                    #print "SEEK ON Z!"
-                    cut_positions = cut_positions + seek
-                #else:
-                    #print "FAIL SEEK IN Z!"
-    print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
-elif pattern.upper() == "EDGE5":
-    print "TEST ANOTHER EDGE FOLLOW METHOD, ONE LAYER AT A TIME"
-    cut_positions = []
-    layer = bottom > top
-    start_position = find_nearby_dot(layer,0,0)
-    depth = 0
-    layer = bottom > top
-    while start_position:
-        cut_positions = cut_positions + ["seek"]
-        x,y = start_position
-        #print start_position
-        x,y,positions = follow_edge(layer,x,y)
-        for position in positions:
-            if len(position) == 3:
-                cx,cy,stress = position
-                cut_positions.append(["stress_dot",[cx,cy,depth],stress])
-            else:
-                cx,cy = position
-                cut_positions.append(["dot",[cx,cy,depth]])
-        if (layer == False).all():
-            print top.max(),"vs",bottom.max()
-            depth += 1
-            top = top.clip(depth,bottom)
-            layer = bottom > top
-            start_position = find_nearby_dot(layer,x,y)
-        else:
-            start_position = find_nearby_dot(layer,x,y)
-            if True: #I want to be able to turn this on and off for testing
-                seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
-                if seek:
-                    #print "SEEK ON Z!"
-                    cut_positions = cut_positions + seek
-                #else:
-                    #print "FAIL SEEK IN Z!"
-    print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
-elif pattern.upper() == "EDGE6":
-    print "TEST ANOTHER EDGE FOLLOW METHOD, ONE LAYER AT A TIME"
-    cut_positions = []
-    layer = bottom > top
-    start_position = find_nearby_dot(layer,0,0)
-    depth = 0
-    layer = bottom > top
-    while start_position:
-        #print top.max(),"vs",bottom.max()
-        cut_positions = cut_positions + ["seek"]
-        x,y = start_position
-        #print start_position
-        #print "DEBUG",layer.max() and start_position
-        #while layer.max() and start_position:
-        print "START: %s,%s,%s" % (x,y,depth), (layer==True).sum(),"to go"
-            #print layer.max(),layer.shape
-        x,y,positions = zigzag(layer,x,y)
-        for position in positions:
-            cx,cy = position
-            cut_positions.append([cx,cy,depth])
-        #print len(positions)
-        #print positions
-        #cut_positions.append("#seek starting at %s,%s" % (x,y))
-            #print layer
+
+
+    if pattern.upper() == "ZIGZAG":
+        print "ZIGZAG ONE LAYER AT A TIME"
+        cut_positions = []
+        layer = bottom > top
+        start_position = find_nearby_dot(layer,0,0)
+        depth = 0
+        layer = bottom > top
+        while start_position:
+            #cut_positions = cut_positions + ["#seek"]
+            x,y = start_position
             #print start_position
-        if (layer == False).all():
-            depth += 1
-            top = top.clip(depth,bottom)
-            layer = bottom > top
-        start_position = find_nearby_dot(layer,x,y)
+            #print "%i to go" % (layer == False).sum()
+            x,y,positions = zigzag(layer,x,y,depth)
+            cut_positions = cut_positions + positions
+            if (layer == False).all():
+                print depth,"vs",bottom.max()
+                depth += 1
+                top = top.clip(depth,bottom)
+                layer = bottom > top
+                start_position = find_nearby_dot(layer,x,y)
+            else:
+                start_position = find_nearby_dot(layer,x,y)
+                if True: #I want to be able to turn this on and off for testing
+                    seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
+                    if seek:
+                        #print "SEEK ON Z!"
+                        cut_positions = cut_positions + seek
+                    #else:
+                        #print "FAIL SEEK IN Z!"
+        print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
+    elif pattern.upper() == "TRACE":
+        print "TRACE AROUND THE EDGES, ONE LAYER AT A TIME"
+        cut_positions = []
+        layer = bottom > top
+        start_position = find_nearby_dot(layer,0,0)
+        depth = 0
+        layer = bottom > top
+        while start_position:
+            cut_positions = cut_positions + ["seek"]
+            x,y = start_position
+            #print start_position
+            x,y,positions = trace(layer,x,y)
+            for position in positions:
+                if len(position) == 3:
+                    cx,cy,stress = position
+                    cut_positions.append(["stress_dot",[cx,cy,depth],stress])
+                else:
+                    cx,cy = position
+                    cut_positions.append(["dot",[cx,cy,depth]])
+            if (layer == False).all():
+                print top.max(),"vs",bottom.max()
+                depth += 1
+                top = top.clip(depth,bottom)
+                layer = bottom > top
+                start_position = find_nearby_dot(layer,x,y)
+            else:
+                start_position = find_nearby_dot(layer,x,y)
+                if True: #I want to be able to turn this on and off for testing
+                    seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
+                    if seek:
+                        #print "SEEK ON Z!"
+                        cut_positions = cut_positions + seek
+                    #else:
+                        #print "FAIL SEEK IN Z!"
+        print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
 
-    #print "TOP\t\t\t\t\tBOTTOM"
-    #for y in range(len(top)):
-    #    print top[y],bottom[y]
-    #print "CUTS"
-    #print cut_positions
-    print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
-
-print "TEST GCODE GENERATION"
-gcode = cut_to_gcode(cut_positions)
-for line in gcode:
-    output_file.write(line+"\r\n")
-output_file.close()
+    print "TEST GCODE GENERATION"
+    gcode = cut_to_gcode(cut_positions)
+    for line in gcode:
+        output_file.write(line+"\r\n")
+    output_file.close()
