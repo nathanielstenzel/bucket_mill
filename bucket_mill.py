@@ -1,6 +1,6 @@
 from PIL import Image
 import sys
-from numpy import array,zeros,searchsorted,amax,int8,int16,int32
+from numpy import array,zeros,amax,int8,int16,int32,unique
 from scipy.misc import imsave,imresize
 from sys import argv
 integer = int32
@@ -23,7 +23,7 @@ def test_dot(array_to_test,x,y):
     return array_to_test[y,x]
 
 def find_nearby_dot(dotmap,x,y):
-    height,width = top.shape
+    height,width = dotmap.shape
     m = test_dot(dotmap,x,y)
     if m:
         return x,y
@@ -124,7 +124,7 @@ def next_edge(dotmap, x, y, seek=True, clockwise=True):
     x_delta,y_delta = directions[go]
     return x+x_delta, y+ y_delta, results["stress"]
 
-def trace(dotmap,x,y):
+def trace_layer(dotmap,x,y):
     positions = []
     if test_array_bounds(dotmap,x,y) and dotmap[y,x]:
         positions.append([x,y])
@@ -138,7 +138,7 @@ def trace(dotmap,x,y):
         position = next_edge(dotmap,x,y)
     return x,y,positions
 
-def zigzag(layer,xin,yin,this_depth):
+def zigzag_layer(layer,xin,yin,this_depth):
     x = xin
     y = yin
     positions = []
@@ -230,8 +230,6 @@ def downsample_to_bit_diameter(image, scale, bit_diameter):
     #print "downsample_to_bit_diamter width=%i height=%i" % (width,height)
     #print "downsample_to_bit_diameter shape:", output.shape
     #print len(image[::bit_diameter,::bit_diameter].tolist()[0])
-    #help(searchsorted)
-    #scale
     for y in range(int(scaled_height)):
         for x in range(int(scaled_width)):
             #print "%s:%s,%s:%s = %s" % ( (y)/scale,(y+bit_diameter)/scale,x/scale,(x+bit_diameter)/scale,amax(image[(y)/scale:(y+bit_diameter)/scale,x/scale:(x+bit_diameter)/scale]))
@@ -239,33 +237,10 @@ def downsample_to_bit_diameter(image, scale, bit_diameter):
             right = min( (x+bit_diameter/2)/scale,  width)
             top = max( (y-bit_diameter/2)/scale, 0)
             bottom = min( (y+bit_diameter/2)/scale, height)
+            #this line will have to be a bit more precise for final cuts
             output[y,x] = amax(image[top:bottom,left:right])
     #print "downsample_to_bit_diameter shape:", output.shape
     return output
-
-
-def downsample(image, image_x_axis, image_y_axis, x_bounds, y_bounds, x_resolution, y_resolution):
-    x_resolution, y_resolution = int(round(x_resolution)), int(round(y_resolution))
-    x_bounds = np.searchsorted(image_x_axis, x_bounds)
-    y_bounds = np.searchsorted(image_y_axis, y_bounds)
-    #y_bounds = image.shape[0] + 1 - y_bounds[::-1]
-    subset = image[y_bounds[0]:y_bounds[1], x_bounds[0]:x_bounds[1]]
-    x_downsample_factor = max(round(subset.shape[1] / x_resolution / 3.), 1)
-    y_downsample_factor = max(round(subset.shape[0] / y_resolution / 3.), 1)
-    subset = subset[::y_downsample_factor,::x_downsample_factor]
-    image = scipy.misc.imresize(subset, (y_resolution,x_resolution), interp='nearest')
-    bounds = image_x_axis[x_bounds[0]:x_bounds[1]]
-    dw = np.max(bounds) - np.min(bounds)
-    bounds = image_y_axis[y_bounds[0]:y_bounds[1]]
-    dh = np.max(bounds) - np.min(bounds)
-    return {'data': image,
-            'offset_x': image_x_axis[x_bounds[0]],
-            'offset_y': image_y_axis[y_bounds[0]],
-            'dw': dw,
-            'dh': dh,
-            'subset': subset,
-    }
-
 
 def make_top(bottom):
     return zeros(bottom.shape,dtype=integer)
@@ -293,6 +268,7 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
     gcode.append("G0 Z0 F%f" % z_rapid_speed)
     gcode.append("G1 X0 Y0 F%f" % cut_speed)
     gcode.append("G1 Z0 F%f" % z_cut_speed)
+    gcode.append("(start object)")
     for cut in cuts:
         if type(cut) == str:
             command = "#"
@@ -325,21 +301,21 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
                 calculated_speed = cut_speed
             #gcode.append("#start line")
             if travel > 1:
-                gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
-                gcode.append("G0 F%.3f X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
-                gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
+                gcode.append("G0 F%i Z%.3f" % (z_rapid_speed,safe_distance))
+                gcode.append("G0 F%i X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                gcode.append("G1 F%i Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
                 z = start[2]
             elif z > start[2]: #we must go up
                 #print z,offsets[2]-cut[2]
-                gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,offsets[2]-start[2]))
-                gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                gcode.append("G0 F%i Z%.3f" % (z_rapid_speed,offsets[2]-start[2]))
+                gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
                 z = start[2]
             else:
-                gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
                 z = start[2]
-            gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+end[0],offsets[1]+end[1]))
+            gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+end[0],offsets[1]+end[1]))
             if end[2] != z:
-                gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-end[2]))
+                gcode.append("G1 F%i Z%.3f" % (z_cut_speed,offsets[2]-end[2]))
             x,y,z = end
         elif command == "stress_segment": #cut from the last point to this point
             end = cut[1]
@@ -348,9 +324,9 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
             stress = min( cut[2] + minimum_stress, 5 )
             calculated_speed = calculated_cut_speeds[stress]
             #gcode.append("#start line")
-            gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed, offsets[0]+end[0], offsets[1]+end[1]))
+            gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed, offsets[0]+end[0], offsets[1]+end[1]))
             if end[2] != z:
-                gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-end[2]))
+                gcode.append("G1 F%i Z%.3f" % (z_cut_speed,offsets[2]-end[2]))
             x,y,z = end
         elif command in ["dot","stress_dot"]:
             if command == "stress_dot":
@@ -361,19 +337,19 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
             start = cut[1]
             travel = abs(start[0]-x) + abs(start[1]-y)
             if travel > 1:
-                gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,safe_distance))
-                gcode.append("G0 F%.3f X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                gcode.append("G0 F%i Z%.3f" % (z_rapid_speed,safe_distance))
+                gcode.append("G0 F%i X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
                 z = safe_distance
             elif z > start[2]: #we must go up
                 #print z,offsets[2]-cut[2]
-                gcode.append("G0 F%.3f Z%.3f" % (z_rapid_speed,offsets[2]-start[2]))
-                gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                gcode.append("G0 F%i Z%.3f" % (z_rapid_speed,offsets[2]-start[2]))
+                gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
                 z = start[2]
             else:
-                gcode.append("G1 F%.3f X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
+                gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
                 z = start[2]
             if z != start[2]:
-                gcode.append("G1 F%.3f Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
+                gcode.append("G1 F%i Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
             x,y,z = start
         else:
             print "UNHANDLED COMMAND: %s" % command
@@ -387,18 +363,157 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
         last_line = line
     return deduped_gcode
 
-def convert_image_to_int8_image(input):
-    height,width = input.shape
-    output = zeros(input.shape)
-    output.dtype = int8
-    for x in range(width):
-        for y in range(height):
-            output[x,y] = int(input[x,y])
-    return output
+def alter_gcode(gcode,adjustments,tidy="Z"):
+    #put whatever letters in tidy...FGXYZ
+    altered_gcode = []
+    translate = False
+    f = g = x = y = z = 0
+    ax = ay = az = 0 #altered
+    lg = lf = 0 #last G and F
+    lax = lay = laz = 0 #last altered
+    for line in gcode:
+        if line.strip().lower() == "(start object)":
+            translate = True
+            altered_gcode.append(line)
+        elif not translate:
+            altered_gcode.append(line)
+        elif line.strip().startswith("("):
+            altered_gcode.append(line)
+        else:
+            has
+            parts = line.split(" ")
+            for part in parts:
+                part = part.upper()
+                if part.startswith("X"):
+                    x = float(part[1:])
+                elif part.startswith("Y"):
+                    y = float(part[1:])
+                elif part.startswith("Z"):
+                    z = float(part[1:])
+                elif part.startswith("G"):
+                    g = int(part[1:])
+                elif part.startswith("F"):
+                    f = int(part[1:])
+            ax,ay,az = x,y,z
+            for adjustment in adjustments:
+                command,parameter = adjustment
+                command = command.upper()
+                if command == "rotate":
+                    degrees = parameter[0]
+                    ax,ay = cos(degrees)*ax - sin(degrees)*ay, sin(degrees)*ay + cos(degrees)*ax
+                elif command == "translate":
+                    dx,dy,dz = parameter #set our deltas
+                    ax += dx
+                    ay += dy
+                    az += dz
+                elif command == "scale":
+                    sx,sy,sz = parameter #set our scales
+                    ax *= sx
+                    ay *= sy
+                    az *= sz
+            altered_line = []
+            if "G" not in tidy or g != lg:
+                altered_line.append("G%i" % g)
+            if "F" not in tidy or f != lf:
+                altered_line.append("F%i" % f)
+            if "X" not in tidy or ax != lax:
+                altered_line.append("X%.03f" % ax)
+            if "Y" not in tidy or ay != lay:
+                altered_line.append("Y%.03f" % ay)
+            if "Z" not in tidy or az != laz:
+                altered_line.append("Z%.03f" % az)
+            lg,lf,lax,lay,laz = g,f,ax,ay,az
+            altered_line = " ".join(altered_line)
+        altered_gcode.append(altered_line)
+    return altered_gcode
+
+def zigzag(bottom):
+    top = make_top(bottom)
+    cut_positions = []
+    layer = bottom > top
+    start_position = find_nearby_dot(layer,0,0)
+    depth = 0
+    layer = bottom > top
+    while start_position:
+        #cut_positions = cut_positions + ["#seek"]
+        x,y = start_position
+        #print start_position
+        #print "%i to go" % (layer == False).sum()
+        x,y,positions = zigzag_layer(layer,x,y,depth)
+        cut_positions = cut_positions + positions
+        if (layer == False).all():
+            print depth,"vs",bottom.max()
+            depth += 1
+            top = top.clip(depth,bottom)
+            layer = bottom > top
+            start_position = find_nearby_dot(layer,x,y)
+        else:
+            start_position = find_nearby_dot(layer,x,y)
+            if True: #I want to be able to turn this on and off for testing
+                seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
+                if seek:
+                    #print "SEEK ON Z!"
+                    cut_positions = cut_positions + seek
+                #else:
+                    #print "FAIL SEEK IN Z!"
+    return cut_positions
+
+def trace(bottom,final=False,cut_top=False):
+    cut_positions = []
+    max_depth = bottom.max()
+    if final:
+        depths = unique(bottom)
+        if depths[0] == 0 and not cut_top:
+            depths = depths[1:]
+        layer = bottom == depths[0]
+    else:
+        top = make_top(bottom)
+        layer = bottom > top
+        depths = range(max_depth+1)
+    start_position = find_nearby_dot(layer,0,0)
+    depth_index = 0
+    depth = depths[depth_index]
+    while start_position:
+        cut_positions = cut_positions + ["seek"]
+        x,y = start_position
+        #print start_position
+        x,y,positions = trace_layer(layer,x,y)
+        for position in positions:
+            if len(position) == 3:
+                cx,cy,stress = position
+                cut_positions.append(["stress_dot",[cx,cy,depth],stress])
+            else:
+                cx,cy = position
+                cut_positions.append(["dot",[cx,cy,depth]])
+        if (layer == False).all():
+            print depth,"vs",bottom.max()
+            depth_index += 1
+            depth = depths[depth_index]
+            if final:
+                if depth == bottom.max():
+                    return cut_positions
+                layer = bottom == depth
+            else:
+                top = top.clip(depth,bottom)
+                layer = bottom > top
+            start_position = find_nearby_dot(layer,x,y)
+        else:
+            start_position = find_nearby_dot(layer,x,y)
+            if True: #I want to be able to turn this on and off for testing
+                if final:
+                    seek_test = bottom >= depth
+                else:
+                    seek_test = bottom > depth
+                
+                seek = seek_dot_on_z( seek_test, (x,y), start_position, depth)
+                if seek:
+                    #print "SEEK ON Z!"
+                    cut_positions = cut_positions + seek
+                #else:
+                    #print "FAIL SEEK IN Z!"
+    return cut_positions
 
 if __name__ == "__main__":
-    #cut_image = Image.open("Best Mom Ever Heart3.gif")
-
     if len(argv) < 7:
         print 'USAGE: python bucket_mill.py "Best Mom Ever Heart3.gif" W 200 20 3 trace test.gcode'
         print 'input file = "Best Mom Ever Heart3.gif"' #argv[1]
@@ -406,7 +521,7 @@ if __name__ == "__main__":
         print 'measurement in mm of width or height as selected above = "200"' #argv[3]
         print 'measurement in mm of the target thickness = "20"' #argv[4]
         print 'measurement in mm of billing bit = "3"' #argv[5]
-        print 'milling pattern to use (trace or zigzag) = "trace"' #argv[6]
+        print 'milling pattern to use (trace or zigzag or final) = "trace"' #argv[6]
         print 'optionally defines output gcode file = "test.gcode". Note that it is otherwise the input file + ".rough-cut.gcode"' #argv[7]
 
     input_file = argv[1]
@@ -434,8 +549,6 @@ if __name__ == "__main__":
     cut_image = cut_image.transpose(Image.FLIP_TOP_BOTTOM) #The bottom left is 0,0 in the CNC, but the upper left is 0,0 in the image
 
     width, height = cut_image.size
-    #help(cut_image)
-    #print cut_image.tobytes()
     print len(cut_image.getdata())
     print "cut image width,height,overall size:",width,height,width*height
     x=0
@@ -444,119 +557,40 @@ if __name__ == "__main__":
 
     bottom = array(cut_image)
     print "bottom shape:",bottom.shape
-    shape = (None,None)
-    #print bottom.tolist()[100]
-    if dimension_restricted.upper() in ["W","WIDTH"]:
-        bottom = downsample_to_bit_diameter(bottom,float(dimension_measurement)/width,int(bit_diameter))
-        print "scale = %s" % (float(dimension_measurement)/width)
+    scale = 1.0
+    thickness_precision=1
+    if pattern == "FINAL:":
+        scale = 1.0
+        thickness_precision=10 #get 1/10 of a mm precision
+    elif dimension_restricted.upper() in ["W","WIDTH"]:
+        scale = float(dimension_measurement)/width
     elif dimension_restricted.upper() in ["H","HEIGHT"]:
-        bottom = downsample_to_bit_diameter(bottom,float(dimension_measurement)/height,int(bit_diameter))
-        print "scale = %s" % (float(dimension_measurement)/height)
+        scale = float(dimension_measurement)/height
+    print "scale = %s" % (scale)
+    bottom = downsample_to_bit_diameter(bottom,scale,int(bit_diameter))
 
-    print "min-max before:",bottom.min(),bottom.max()
-    #print bottom.tolist()[10]
-    bottom = int(thickness) -1 - bottom * int(thickness) / 256
-    print "min-max after:",bottom.min(),bottom.max()
-    #bottom = convert_image_to_int8_image(bottom)
-    #bottom.dtype = int8
-    print "target shape:",shape
-    print "bottom shape:",bottom.shape
-    #for row in bottom.tolist():
-    #    print row
-
-    top = make_top(bottom)
-    print "THE TOP IS MADE"
-    #for row in top.tolist():
-    #    print row
-    print "bottom shape:",bottom.shape, "top shape:",top.shape
-    print "test shape:",shape
-
-    #exit()
-    #help(bottom)
-    #print dir(bottom)
-
-    #print bottom.tolist()
-    #imsave("test.jpg",bottom)
-    #exit()
-
-    #print bottom.tolist()
-    #help(bottom)
-
-    #top = imresize(bottom,(225,210)) #in this way, we can scale down the image quickly to the dimensions in milimeters
-    #print top.tolist()
-    #exit()
+    bottom = int(thickness*thickness_precision) -1 - bottom * int(thickness) * thickness_precision / 256
 
     cut_positions = []
 
-
     if pattern.upper() == "ZIGZAG":
         print "ZIGZAG ONE LAYER AT A TIME"
-        cut_positions = []
-        layer = bottom > top
-        start_position = find_nearby_dot(layer,0,0)
-        depth = 0
-        layer = bottom > top
-        while start_position:
-            #cut_positions = cut_positions + ["#seek"]
-            x,y = start_position
-            #print start_position
-            #print "%i to go" % (layer == False).sum()
-            x,y,positions = zigzag(layer,x,y,depth)
-            cut_positions = cut_positions + positions
-            if (layer == False).all():
-                print depth,"vs",bottom.max()
-                depth += 1
-                top = top.clip(depth,bottom)
-                layer = bottom > top
-                start_position = find_nearby_dot(layer,x,y)
-            else:
-                start_position = find_nearby_dot(layer,x,y)
-                if True: #I want to be able to turn this on and off for testing
-                    seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
-                    if seek:
-                        #print "SEEK ON Z!"
-                        cut_positions = cut_positions + seek
-                    #else:
-                        #print "FAIL SEEK IN Z!"
+        cut_positions = zigzag(bottom)
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
     elif pattern.upper() == "TRACE":
         print "TRACE AROUND THE EDGES, ONE LAYER AT A TIME"
-        cut_positions = []
-        layer = bottom > top
-        start_position = find_nearby_dot(layer,0,0)
-        depth = 0
-        layer = bottom > top
-        while start_position:
-            cut_positions = cut_positions + ["seek"]
-            x,y = start_position
-            #print start_position
-            x,y,positions = trace(layer,x,y)
-            for position in positions:
-                if len(position) == 3:
-                    cx,cy,stress = position
-                    cut_positions.append(["stress_dot",[cx,cy,depth],stress])
-                else:
-                    cx,cy = position
-                    cut_positions.append(["dot",[cx,cy,depth]])
-            if (layer == False).all():
-                print top.max(),"vs",bottom.max()
-                depth += 1
-                top = top.clip(depth,bottom)
-                layer = bottom > top
-                start_position = find_nearby_dot(layer,x,y)
-            else:
-                start_position = find_nearby_dot(layer,x,y)
-                if True: #I want to be able to turn this on and off for testing
-                    seek = seek_dot_on_z( bottom > depth, (x,y), start_position, depth)
-                    if seek:
-                        #print "SEEK ON Z!"
-                        cut_positions = cut_positions + seek
-                    #else:
-                        #print "FAIL SEEK IN Z!"
+        cut_positions = trace(bottom)
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
-
+    elif pattern.upper() == "FINAL":
+        print "MAKE A FINAL CUT"
+        #we should first use a size 10-20 times larger than the mm of the item so we have good detail
+        cut_positions = trace(bottom,final=True)
+        #we should scale gcode down later
+        print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
     print "TEST GCODE GENERATION"
     gcode = cut_to_gcode(cut_positions)
+    if pattern.upper() == "FINAL":
+        gcode = alter_gcode(gcode,[("scale",scale,scale,1.0/thickness_precision)])
     for line in gcode:
         output_file.write(line+"\r\n")
     output_file.close()
