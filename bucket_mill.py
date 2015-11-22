@@ -432,7 +432,8 @@ def alter_gcode(gcode,adjustments,tidy="Z"):
                 altered_line.append("Z%s" % az)
             lg,lf,lax,lay,laz = g,f,ax,ay,az
             altered_line = " ".join(altered_line)
-            altered_gcode.append(altered_line)
+            if altered_line.strip():
+                altered_gcode.append(altered_line)
     return altered_gcode
 
 def zigzag(bottom):
@@ -440,7 +441,7 @@ def zigzag(bottom):
     cut_positions = []
     layer = bottom > top
     start_position = find_nearby_dot(layer,0,0)
-    depth = 0
+    depth = 1
     layer = bottom > top
     while start_position:
         #cut_positions = cut_positions + ["#seek"]
@@ -450,9 +451,9 @@ def zigzag(bottom):
         x,y,positions = zigzag_layer(layer,x,y,depth)
         cut_positions = cut_positions + positions
         if (layer == False).all():
-            print depth,"vs",bottom.max()
-            depth += 1
+            print depth,"of",bottom.max()
             top = top.clip(depth,bottom)
+            depth += 1
             layer = bottom > top
             start_position = find_nearby_dot(layer,x,y)
         else:
@@ -471,7 +472,7 @@ def trace(bottom):
     cut_positions = []
     layer = bottom > top
     start_position = find_nearby_dot(layer,0,0)
-    depth = 0
+    depth = 1
     layer = bottom > top
     while start_position:
         cut_positions = cut_positions + ["seek"]
@@ -486,9 +487,9 @@ def trace(bottom):
                 cx,cy = position
                 cut_positions.append(["dot",[cx,cy,depth]])
         if (layer == False).all():
-            print top.max(),"vs",bottom.max()
-            depth += 1
+            print depth,"of",bottom.max()
             top = top.clip(depth,bottom)
+            depth += 1
             layer = bottom > top
             start_position = find_nearby_dot(layer,x,y)
         else:
@@ -519,54 +520,8 @@ def get_outline(bottom,depth):
     #boolean * boolean means AND
     layer = ((u*r)+(d*r)+(u*l)+(d*l)+base) * above
     return layer
-
-def final(bottom,cut_top=False):
-    import time
-    cut_positions = []
-    max_depth = bottom.max()
-    depths = unique(bottom)
-    if depths[0] == 0 and not cut_top:
-        depths = depths[1:]
-    depth_index = 0
-    depth = depths[depth_index]
-    start_time = time.time()
-    layer = get_outline(bottom,depth)
-    end_time = time.time()
-    print end_time-start_time
-    start_position = find_nearby_dot(layer,0,0)
-    while start_position:
-        cut_positions = cut_positions + ["seek"]
-        x,y = start_position
-        #print start_position
-        x,y,positions = zigzag_layer(layer,x,y,depth)
-        for position in positions:
-            if len(position) == 3:
-                cx,cy,stress = position
-                cut_positions.append(["stress_dot",[cx,cy,depth],stress])
-            else:
-                cx,cy = position
-                cut_positions.append(["dot",[cx,cy,depth]])
-        if (layer == False).all():
-            print depth,"vs",bottom.max()
-            depth_index += 1
-            depth = depths[depth_index]
-            if depth == bottom.max():
-                return cut_positions
-            layer = get_outline(bottom,depth)
-            start_position = find_nearby_dot(layer,x,y)
-        else:
-            start_position = find_nearby_dot(layer,x,y)
-            if True: #I want to be able to turn this on and off for testing
-                seek_test = bottom >= depth
-                seek = seek_dot_on_z( seek_test, (x,y), start_position, depth)
-                if seek:
-                    #print "SEEK ON Z!"
-                    cut_positions = cut_positions + seek
-                #else:
-                    #print "FAIL SEEK IN Z!"
-    return cut_positions
-    
-def final2(bottom):
+  
+def final(bottom):
     cut_positions = []
     height,width = bottom.shape
     last_y = last_x = last_z = 0
@@ -684,7 +639,7 @@ if __name__ == "__main__":
     elif pattern.upper() == "FINAL":
         print "MAKE A FINAL CUT"
         #we should first use a size 10-20 times larger than the mm of the item so we have good detail
-        cut_positions = final2(bottom)
+        cut_positions = final(bottom)
         #we should scale gcode down later
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
     print "TEST GCODE GENERATION"
