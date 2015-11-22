@@ -521,43 +521,50 @@ def get_outline(bottom,depth):
     layer = ((u*r)+(d*r)+(u*l)+(d*l)+base) * above
     return layer
   
-def final(bottom):
+def final(bottom,passes="xy"):
     cut_positions = []
     height,width = bottom.shape
-    last_y = last_x = last_z = 0
-    we_skipped_the_last_dot = False
     xrange = range(width)
-    for y in range(height):
-        for x in xrange:
-            z = bottom[y,x]
-            if z != last_z:
-                if we_skipped_the_last_dot:
-                    cut_positions.append(("simple",(last_x,y,last_z)))
-                we_skipped_the_last_dot = False
-                cut_positions.append(("simple",(x,y,z)))
-            else:
-                we_skipped_the_last_dot = True
-            last_x,last_y,last_z = x,y,z
-        xrange.reverse()
-    if we_skipped_the_last_dot:
-        cut_positions.append(("simple",(last_x,y,last_z)))
-    return cut_positions
-    cut_positions.append(("dot",(last_x,y,last_z)))
-    we_skipped_the_last_dot = False
-    for x in range(width):
+    if "x" in passes:
+        last_y = last_x = last_z = 0
+        we_skipped_the_last_dot = False
         for y in range(height):
-            z = bottom[y,x]
-            if z != last_z:
-                if we_skipped_the_last_dot:
-                    cut_positions.append(("simple",(x,last_y,last_z)))
-                we_skipped_the_last_dot = False
-                cut_positions.append(("simple",(x,y,z)))
-            else:
-                we_skipped_the_last_dot = True
-            last_x,last_y,last_z = x,y,z
-    if we_skipped_the_last_dot:
+            for x in xrange:
+                z = bottom[y,x]
+                if z != last_z:
+                    if we_skipped_the_last_dot:
+                        cut_positions.append(("simple",(last_x,y,last_z)))
+                    we_skipped_the_last_dot = False
+                    cut_positions.append(("simple",(x,y,z)))
+                else:
+                    we_skipped_the_last_dot = True
+                last_x,last_y,last_z = x,y,z
+            xrange.reverse()
+        if we_skipped_the_last_dot:
+            cut_positions.append(("simple",(last_x,y,last_z)))
+        cut_positions.append(("dot",(last_x,y,last_z)))
+    we_skipped_the_last_dot = False
+    last_y = last_x = last_z = 0
+    if "y" in passes:
+        we_skipped_the_last_dot = False
+        yrange = range(height)
+        yrange.reverse()
+        cut_positions.append(("dot",(0,0,0)))
+        for x in xrange:
+            for y in yrange:
+                z = bottom[y,x]
+                if z != last_z:
+                    if we_skipped_the_last_dot:
+                        cut_positions.append(("simple",(x,last_y,last_z)))
+                    we_skipped_the_last_dot = False
+                    cut_positions.append(("simple",(x,y,z)))
+                else:
+                    we_skipped_the_last_dot = True
+                last_x,last_y,last_z = x,y,z
+            yrange.reverse()
+        if we_skipped_the_last_dot:
+            cut_positions.append(("simple",(x,last_y,last_z)))
         cut_positions.append(("simple",(last_x,y,last_z)))
-    cut_positions.append(("simple",(last_x,y,last_z)))
     return cut_positions
     
 if __name__ == "__main__":
@@ -639,7 +646,7 @@ if __name__ == "__main__":
     elif pattern.upper() == "FINAL":
         print "MAKE A FINAL CUT"
         #we should first use a size 10-20 times larger than the mm of the item so we have good detail
-        cut_positions = final(bottom)
+        cut_positions = final(bottom,passes="x")
         #we should scale gcode down later
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
     print "TEST GCODE GENERATION"
