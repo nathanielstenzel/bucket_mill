@@ -1,8 +1,9 @@
 from PIL import Image
 import sys
-from numpy import array,zeros,amax,int8,int16,int32,unique,roll
+from numpy import array,zeros,amax,int8,int16,int32,unique,roll,mgrid,ma,ones,sqrt,extract
 from scipy.misc import imsave,imresize
 from sys import argv
+from math import radians,cos,sin,tan
 integer = int32
 try:
     import scipy
@@ -11,6 +12,33 @@ except ImportError as e:
     print(e)
 
 directions = {"up":[0,-1],"down":[0,+1],"left":[-1,0],"right":[+1,0],"center":[0,0]}
+
+def bit_pixels(bit_shape="cylinder",diameter=3):
+    radius = diameter/2.0
+    if diameter % 2:
+        size = diameter
+        x, y = mgrid[:size, :size]
+        x = x + 0.5
+        y = y + 0.5
+    else:
+        size = diameter + 1
+        x, y = mgrid[:size, :size]
+    sphere = (x - radius) ** 2 + (y - radius) ** 2
+    circle_mask = ma.make_mask(sphere > radius**2) #true when outside the circle
+    high = ones((size,size))*10000
+    if bit_shape in ["cylinder","ball","sphere"]:
+        if bit_shape == "cylinder":
+            output = circle_mask * high
+        else:
+            #print "test"
+            output = (circle_mask == False) * sphere + circle_mask * high
+    elif bit_shape.startswith("v"):
+        angle = float(bit_shape[1:])/2.0
+        angle = radians(90-angle)
+        step = tan(angle)
+        cone = sqrt(sphere) * step
+        output = (circle_mask == False) *cone + circle_mask * high
+    return output
 
 def test_array_bounds(array_to_test,x,y):
     y_size,x_size = array_to_test.shape
@@ -218,7 +246,7 @@ def zigzag_layer(layer,xin,yin,this_depth):
     #positions.append("#ending at %s,%s" % (x,y))
     return x,y,positions
 
-def downsample_to_bit_diameter(image, scale, bit_diameter):
+def downsample_to_bit_diameter(image, scale, bit_diameter, bit="square"):
     #print image.shape
     height,width = image.shape
     scaled_width = width*scale
@@ -233,12 +261,38 @@ def downsample_to_bit_diameter(image, scale, bit_diameter):
     for y in range(int(scaled_height)):
         for x in range(int(scaled_width)):
             #print "%s:%s,%s:%s = %s" % ( (y)/scale,(y+bit_diameter)/scale,x/scale,(x+bit_diameter)/scale,amax(image[(y)/scale:(y+bit_diameter)/scale,x/scale:(x+bit_diameter)/scale]))
-            left = max( (x-bit_diameter/2)/scale,  0)
-            right = min( (x+bit_diameter/2)/scale,  width)
-            top = max( (y-bit_diameter/2)/scale, 0)
-            bottom = min( (y+bit_diameter/2)/scale, height)
-            #this line will have to be a bit more precise for final cuts
-            output[y,x] = amax(image[top:bottom,left:right])
+            left = (x-bit_diameter/2)/scale
+            right = (x+bit_diameter/2+1)/scale
+            top = (y-bit_diameter/2)/scale
+            bottom = (y+bit_diameter/2+1)/scale
+            if bit == "square":
+                left = max( left,  0)
+                right = min( right,  width)
+                top = max( top, 0)
+                bottom = min( bottom, height)
+                #this line will have to be a bit more precise for final cuts
+                output[y,x] = amax(image[top:bottom,left:right])
+            else:
+                mx,my = mgrid[ left:right, top:bottom ]
+                mask_for_bit_check = ma.make_mask( (mx>=0) * (mx<width) * (my>=0) * (my<height))
+                left = max( left,  0)
+                right = min( right,  width)
+                top = max( top, 0)
+                bottom = min( bottom, height)
+                surface_subset = image[top:bottom,left:right]
+                surface_subset = surface_subset.flatten()
+                bit_subset = extract(mask_for_bit_check,bit)
+                #print dir(bit_subset)
+                #print "image:",surface_subset.shape
+                #print "vs"
+                #print "bit:",bit_subset.shape
+                output[y,x] = amax(surface_subset - bit_subset)
+            #if I save that range instead of doing amax on it, I could:
+            #   1. do amax on it for zigzag or trace cuts
+            #   or
+            #   2. subtract a grid of values from it where 0 is the tip of the bit and then amax the result
+            #how do I get a grid that represents the shape of the bit?
+            #will that affect the speed too much?
     #print "downsample_to_bit_diameter shape:", output.shape
     return output
 
@@ -623,6 +677,8 @@ if __name__ == "__main__":
         scale_to_use = 1.0
         safety = 0
         thickness = float(thickness)
+        #which_bit = bit_pixels(bit_shape="v90",diameter=float(bit_diameter)/scale)
+        #bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale,bit=which_bit)
         bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale)
     else:
         bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter))
