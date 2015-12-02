@@ -1,6 +1,6 @@
 from PIL import Image
 import sys
-from numpy import array,zeros,amax,int8,int16,int32,unique,roll,mgrid,ma,ones,sqrt,extract
+from numpy import array,zeros,amax,amin,int8,int16,int32,unique,roll,mgrid,ma,ones,sqrt,extract
 from scipy.misc import imsave,imresize
 from sys import argv
 from math import radians,cos,sin,tan
@@ -248,16 +248,18 @@ def zigzag_layer(layer,xin,yin,this_depth):
 
 def downsample_to_bit_diameter(image, scale, bit_diameter, bit="square"):
     #print image.shape
+    bit_diameter = int(bit_diameter)
     height,width = image.shape
     scaled_width = width*scale
     scaled_height = height*scale
     output = zeros((scaled_height,scaled_width),dtype=integer)
     #coordinates are height,width
-    #print "output is %s" % str(output.shape)
+    print "output is %s" % str(output.shape)
     print "target width, target height, scale = ",scaled_width,scaled_height,scale
     #print "downsample_to_bit_diamter width=%i height=%i" % (width,height)
     #print "downsample_to_bit_diameter shape:", output.shape
-    #print len(image[::bit_diameter,::bit_diameter].tolist()[0])
+    #print len(image[::bit_diameter,::bit-_diameter].tolist()[0])
+    #print "bit_diameter:",bit_diameter
     for y in range(int(scaled_height)):
         for x in range(int(scaled_width)):
             #print "%s:%s,%s:%s = %s" % ( (y)/scale,(y+bit_diameter)/scale,x/scale,(x+bit_diameter)/scale,amax(image[(y)/scale:(y+bit_diameter)/scale,x/scale:(x+bit_diameter)/scale]))
@@ -273,20 +275,28 @@ def downsample_to_bit_diameter(image, scale, bit_diameter, bit="square"):
                 #this line will have to be a bit more precise for final cuts
                 output[y,x] = amax(image[top:bottom,left:right])
             else:
-                mx,my = mgrid[ left:right, top:bottom ]
-                mask_for_bit_check = ma.make_mask( (mx>=0) * (mx<width) * (my>=0) * (my<height))
+                #print "-"*80
+                #print left,right,top,bottom, "at %s,%s" % (y,x)
+                my,mx = mgrid[ top:bottom, left:right ]
+                mask_for_bit_check = ma.make_mask( (mx>=0) * (mx<width) * (my>=0) * (my<height) )
                 left = max( left,  0)
                 right = min( right,  width)
                 top = max( top, 0)
                 bottom = min( bottom, height)
                 surface_subset = image[top:bottom,left:right]
+                #print "surface:",surface_subset
                 surface_subset = surface_subset.flatten()
                 bit_subset = extract(mask_for_bit_check,bit)
+                #print "surface:",surface_subset.tolist()
+                #print "bit:",bit_subset.tolist()
                 #print dir(bit_subset)
-                #print "image:",surface_subset.shape
-                #print "vs"
-                #print "bit:",bit_subset.shape
-                output[y,x] = amax(surface_subset - bit_subset)
+                #print "image:",surface_subset.shape,"vs","bit:",bit_subset.shape
+                try:
+                    output[y,x] = amax( surface_subset - bit_subset )
+                except:
+                    print mask_for_bit_check.sum()
+                    raise
+                #print "result:",output[y,x]
             #if I save that range instead of doing amax on it, I could:
             #   1. do amax on it for zigzag or trace cuts
             #   or
@@ -620,7 +630,14 @@ def final(bottom,passes="xy"):
             cut_positions.append(("simple",(x,last_y,last_z)))
         cut_positions.append(("simple",(last_x,y,last_z)))
     return cut_positions
-    
+
+if False: #turn this to True to do a simple test for fitting the shape of the bit to the part
+    blah = array([[100,100,100,100,100],[100,100,100,100,100],[100,50,0,100,100],[100,100,100,100,100],[100,100,100,100,100]])
+    bit = array([[1000,1000,1000,1000,1000],[1000,1000,1000,1000,1000],[1000,20,0,50,1000],[1000,1000,1000,1000,1000],[1000,1000,1000,1000,1000]])
+    out = downsample_to_bit_diameter(blah,1,5,bit)
+    print "OUT:",out
+    exit()
+                            
 if __name__ == "__main__":
     if len(argv) < 7:
         print 'USAGE: python bucket_mill.py "Best Mom Ever Heart3.gif" W 200 20 3 trace test.gcode'
@@ -677,9 +694,12 @@ if __name__ == "__main__":
         scale_to_use = 1.0
         safety = 0
         thickness = float(thickness)
-        #which_bit = bit_pixels(bit_shape="v90",diameter=float(bit_diameter)/scale)
-        #bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale,bit=which_bit)
-        bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale)
+        which_bit = bit_pixels(bit_shape="v90",diameter=float(bit_diameter)/scale)
+        #print "bit pixels diameter:",float(bit_diameter)/scale
+        #print "bit pixels size:",which_bit.shape
+        diameter = which_bit.shape[0]
+        bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale,bit=which_bit)
+        #bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale)
     else:
         bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter))
     print "resolution of cut in pixels:",bottom.shape
