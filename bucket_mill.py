@@ -637,28 +637,55 @@ if False: #turn this to True to do a simple test for fitting the shape of the bi
     out = downsample_to_bit_diameter(blah,1,5,bit)
     print "OUT:",out
     exit()
-                            
-if __name__ == "__main__":
-    if len(argv) < 7:
-        print 'USAGE: python bucket_mill.py "Best Mom Ever Heart3.gif" W 200 20 3 trace test.gcode'
-        print 'input file = "Best Mom Ever Heart3.gif"' #argv[1]
-        print 'W or H or Width or Height = "W"' #argv[2]
-        print 'measurement in mm of width or height as selected above = "200"' #argv[3]
-        print 'measurement in mm of the target thickness = "20"' #argv[4]
-        print 'measurement in mm of billing bit = "3"' #argv[5]
-        print 'milling pattern to use (trace or zigzag or final) = "trace"' #argv[6]
-        print 'optionally defines output gcode file = "test.gcode". Note that it is otherwise the input file + ".rough-cut.gcode"' #argv[7]
 
-    input_file = argv[1]
-    dimension_restricted = argv[2]
-    dimension_measurement = argv[3]
-    thickness = argv[4]
-    bit_diameter = argv[5]
-    pattern = argv[6]
-    output_filename = argv[1].rsplit(".")[0] + ".rough-cut.gcode"
-    if len(argv) == 8:
-        output_filename = argv[7]
-    output_file = open(output_filename, "w")
+def get_parameters(parameters={}):
+    if not parameters.has_key("misc"):
+        parameters["misc"] = []
+    params = argv[1:]
+    while params:
+        if params[0].startswith("--"):
+            p = params.pop(0)[2:]
+            if p.count("=") == 1:
+                field,value = p.split("=")
+                parameters[field]=value
+            else:
+                parameters[p] = ""
+            params
+        elif params[0].startswith("-") and len(params) >= 2 and not params[1].startswith("-"):
+            p = params.pop(0)[1:]
+            f = params.pop(0)
+            parameters[p] = f
+        elif params[0].startswith("-"):
+            print "I was expecting a value after %s, but did not see one." % params[0]
+            exit(1)
+        else:
+            parameters["misc"].append( params.pop(0) )
+    return parameters
+
+if __name__ == "__main__":
+    try:
+        parameters = get_parameters(parameters={"bit":"square"})
+        input_file = parameters["image"]
+        dimension_restricted = parameters["match"]
+        dimension_measurement = parameters["size"]
+        thickness = parameters["depth"]
+        bit_diameter = parameters["bit-diameter"]
+        pattern = parameters["method"]
+        if parameters.has_key("output"):
+            output_filename = parameters["output"]
+        else:
+            output_filename = input_file.rsplit(".")[0] + ".rough-cut.gcode"
+        bit_to_use = parameters["bit"]
+        output_file = open(output_filename, "w")
+    except:
+        print 'USAGE: python bucket_mill.py -image "Best Mom Ever Heart3.gif" --match=width --size=200 --depth=20 --bit-diameter=3 --method=trace --output=test.gcode'
+        print '\t--match must be set to "W" or "WIDTH" or "H" or "HEIGHT"'
+        print '\t--size is the size of the width or height (whichever you specified in --match)'
+        print '\tAll measurements are in millimeters'
+        print '\tThe bit can be set by --bit="ball" other options are sphere (same thing), square (default), cylinder, v90 (or some other angle else than 90)'
+        print '\t--method sets the milling pattern to use (trace or zigzag or final)'
+        print '\tIf you do not define the output file, it will decide one based on the file name.'
+        exit(1)
 
     print "input file: %s" % input_file
     print "dimension_restricted: %s" % dimension_restricted
@@ -694,14 +721,17 @@ if __name__ == "__main__":
         scale_to_use = 1.0
         safety = 0
         thickness = float(thickness)
-        which_bit = bit_pixels(bit_shape="v90",diameter=float(bit_diameter)/scale)
-        #print "bit pixels diameter:",float(bit_diameter)/scale
-        #print "bit pixels size:",which_bit.shape
-        diameter = which_bit.shape[0]
-        bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale,bit=which_bit)
-        #bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale)
+        if bit_to_use.upper() == "SQUARE":
+            bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale)
+        else:
+            which_bit = bit_pixels(bit_shape=bit_to_use,diameter=float(bit_diameter)/scale)
+            bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale,bit=which_bit)
     else:
-        bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter))
+        if bit_to_use.upper() == "SQUARE":
+            bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter))
+        else:
+            which_bit = bit_pixels(bit_shape=bit_to_use,diameter=float(bit_diameter)/scale)
+            bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter),bit=which_bit)
     print "resolution of cut in pixels:",bottom.shape
     print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
     print "get the layer count we want"
