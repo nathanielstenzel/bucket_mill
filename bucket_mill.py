@@ -435,6 +435,7 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
 
 def alter_gcode(gcode,adjustments,tidy="Z"):
     #put whatever letters in tidy...FGXYZ
+    tidy = tidy.upper()
     altered_gcode = []
     translate = False
     f = g = x = y = z = 0
@@ -586,6 +587,7 @@ def get_outline(bottom,depth):
     return layer
   
 def final(bottom,passes="xy"):
+    passes = passes.lower()
     cut_positions = []
     height,width = bottom.shape
     xrange = range(width)
@@ -664,7 +666,7 @@ def get_parameters(parameters={}):
 
 if __name__ == "__main__":
     try:
-        parameters = get_parameters(parameters={"bit":"square"})
+        parameters = get_parameters(parameters={"bit":"square","tidy":"GFXYZ","final-passes":"xy"})
         input_file = parameters["image"]
         dimension_restricted = parameters["match"]
         dimension_measurement = parameters["size"]
@@ -685,6 +687,8 @@ if __name__ == "__main__":
         print '\tThe bit can be set by --bit="ball" other options are sphere (same thing), square (default), cylinder, v90 (or some other angle else than 90)'
         print '\t--method sets the milling pattern to use (trace or zigzag or final)'
         print '\tIf you do not define the output file, it will decide one based on the file name.'
+        print '\t--final-passes="xy" will set both x cuts and y cuts for the final cut. You can choose x, y or xy.'
+        print '\t--tidy="GFXYZ" chooses which gcode commands to reduce duplicates of'
         exit(1)
 
     print "input file: %s" % input_file
@@ -752,17 +756,17 @@ if __name__ == "__main__":
     elif pattern.upper() == "FINAL":
         print "MAKE A FINAL CUT"
         #we should first use a size 10-20 times larger than the mm of the item so we have good detail
-        cut_positions = final(bottom,passes="x")
+        cut_positions = final(bottom,passes=parameters["final-passes"])
         #we should scale gcode down later
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
     print "TEST GCODE GENERATION"
     gcode = cut_to_gcode(cut_positions)
     if pattern.upper() == "FINAL":
         print "scaling by %s,%s,%s" % (scale,scale,1.0/thickness)
-        gcode = alter_gcode(gcode,[("scale",(scale,scale,1.0/thickness_precision))],tidy="GFXYZ")
+        gcode = alter_gcode(gcode,[("scale",(scale,scale,1.0/thickness_precision))],tidy=parameters["tidy"])
     else:
         print "cleaning up the gcode a little more"
-        gcode = alter_gcode(gcode,[],tidy="GFXYZ")
+        gcode = alter_gcode(gcode,[],parameters["tidy"])
     for line in gcode:
         output_file.write(line+"\r\n")
     output_file.close()
