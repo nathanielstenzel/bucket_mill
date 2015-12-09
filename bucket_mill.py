@@ -1,15 +1,9 @@
 from PIL import Image
-import sys
-from numpy import array,zeros,amax,amin,int8,int16,int32,unique,roll,mgrid,ma,ones,sqrt,extract
-from scipy.misc import imsave,imresize
+from numpy import array,zeros,amax,int8,int16,int32,unique,roll,mgrid,ma,ones,sqrt,extract
 from sys import argv
 from math import radians,cos,sin,tan
+from stl import mesh
 integer = int32
-try:
-    import scipy
-    import scipy.misc
-except ImportError as e:
-    print(e)
 
 directions = {"up":[0,-1],"down":[0,+1],"left":[-1,0],"right":[+1,0],"center":[0,0]}
 
@@ -699,19 +693,43 @@ if __name__ == "__main__":
     print "pattern: %s" % pattern
     print "output file name: %s" % output_filename
 
-    cut_image = Image.open(input_file)
-    cut_image.convert("L") # Convert image to grayscale
-
-    cut_image = cut_image.transpose(Image.FLIP_TOP_BOTTOM) #The bottom left is 0,0 in the CNC, but the upper left is 0,0 in the image
-
-    width, height = cut_image.size
-    print len(cut_image.getdata())
-    print "cut image width,height,overall size:",width,height,width*height
-    x=0
-
-    row = []
-
-    bottom = array(cut_image)
+    if input_file.upper().endswith("STL"):
+        your_mesh = mesh.Mesh.from_file(input_file)
+        minx,miny,minz = ( your_mesh.x.min(),your_mesh.y.min(),your_mesh.z.min() )
+        your_mesh.x = your_mesh.x - minx
+        your_mesh.y = your_mesh.y - miny
+        your_mesh.z = your_mesh.z - minz
+        print "Z:",your_mesh.z.min(),your_mesh.z.max()
+        #your_mesh.z = 1+255.0/your_mesh.z.max() * your_mesh.z
+        minx,maxx,miny,maxy = ( your_mesh.x.min(),your_mesh.x.max(),your_mesh.y.min(),your_mesh.y.max() )
+        print "X: %0.3f - %0.3f\tY: %0.3f - %0.3f" % (minx,maxx,miny,maxy)
+        scale = 1.0
+        thickness_precision=1
+        if dimension_restricted.upper() in ["W","WIDTH"]:
+            scale = float(dimension_measurement)/maxx
+        elif dimension_restricted.upper() in ["H","HEIGHT"]:
+            scale = float(dimension_measurement)/maxy
+        your_mesh.x = your_mesh.x * scale
+        your_mesh.y = your_mesh.y * scale
+        width,height = ( int(your_mesh.x.max()+1), int(your_mesh.y.max()+1) )
+        bottom = zeros((width,height))
+        for i in range(len(your_mesh.x)):
+            x = your_mesh.x[i]
+            y = your_mesh.y[i]
+            z = your_mesh.z[i]
+            bottom[int(x[0]),int(y[0])] = max(bottom[int(x[0]),int(y[0])], int(z[0]))
+            bottom[int(x[1]),int(y[1])] = max(bottom[int(x[1]),int(y[1])], int(z[1]))
+            bottom[int(x[2]),int(y[2])] = max(bottom[int(x[2]),int(y[2])], int(z[2]))
+        bottom = bottom * scale
+        print "cut image width,height,overall size:",width,height,width*height
+    else:
+        cut_image = Image.open(input_file)
+        cut_image.convert("L") # Convert image to grayscale
+        width, height = cut_image.size
+        cut_image = cut_image.transpose(Image.FLIP_TOP_BOTTOM) #The bottom left is 0,0 in the CNC, but the upper left is 0,0 in the image
+        print len(cut_image.getdata())
+        print "cut image width,height,overall size:",width,height,width*height
+        bottom = array(cut_image)
     scale = 1.0
     thickness_precision=1
     if dimension_restricted.upper() in ["W","WIDTH"]:
@@ -720,6 +738,10 @@ if __name__ == "__main__":
         scale = float(dimension_measurement)/height
     scale_to_use = scale
     safety = 1
+    print "SCALE: %0.03f" % scale
+    if scale < 1.0:
+        print "A scale of less than 1 causes bit matching to fail."
+        print "This is why bit matching for STL files fails."
     if pattern.upper() == "FINAL":
         thickness_precision=10 #get 1/10 of a mm precision
         scale_to_use = 1.0
@@ -736,12 +758,20 @@ if __name__ == "__main__":
         else:
             which_bit = bit_pixels(bit_shape=bit_to_use,diameter=float(bit_diameter)/scale)
             bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter),bit=which_bit)
-    print "resolution of cut in pixels:",bottom.shape
-    print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
-    print "get the layer count we want"
-    render_thickness = thickness*thickness_precision
-    print "render thickness:",render_thickness
-    bottom = int(render_thickness) -safety - bottom * int(render_thickness) / 256
+    if input_file.upper().endswith("STL"):
+        print "resolution of cut in pixels:",bottom.shape
+        print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
+        print "get the layer count we want"
+        bottom =  ( bottom.max()-bottom )* int(thickness_precision) - 1
+        print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
+    else:
+        print "resolution of cut in pixels:",bottom.shape
+        print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
+        print "get the layer count we want"
+        render_thickness = thickness*thickness_precision
+        print "render thickness:",render_thickness
+        bottom = int(render_thickness) -safety - bottom * int(render_thickness) / 256
+        
     print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
     cut_positions = []
 
