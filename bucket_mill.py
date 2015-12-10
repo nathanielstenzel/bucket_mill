@@ -720,6 +720,14 @@ if __name__ == "__main__":
             bottom[int(x[0]),int(y[0])] = max(bottom[int(x[0]),int(y[0])], int(z[0]))
             bottom[int(x[1]),int(y[1])] = max(bottom[int(x[1]),int(y[1])], int(z[1]))
             bottom[int(x[2]),int(y[2])] = max(bottom[int(x[2]),int(y[2])], int(z[2]))
+            if (x.ptp() > 1) or (y.ptp() > 1) or (z.ptp() > 1):
+                #the triangle dots are far enough apart, we should try to get 4 more dots and see if that helps
+                p1 = [x.mean(),y.mean(),z.mean()]
+                p2 = [x[:2].mean(),y[:2].mean(),z[:2].mean()]
+                p3 = [x[1:].mean(),y[1:].mean(),z[1:].mean()]
+                p4 = [(x[0]+x[2])/2,(y[0]+y[2])/2,(z[0]+z[2])/2]
+                for p in [p1,p2,p3,p4]:
+                    bottom[int(p[0]),int(p[1])] = max(bottom[int(p[0]),int(p[1])], int(p[2]))
         bottom = bottom * scale
         print "cut image width,height,overall size:",width,height,width*height
         width = width - 1
