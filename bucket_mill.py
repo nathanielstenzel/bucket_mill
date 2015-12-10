@@ -722,6 +722,8 @@ if __name__ == "__main__":
             bottom[int(x[2]),int(y[2])] = max(bottom[int(x[2]),int(y[2])], int(z[2]))
         bottom = bottom * scale
         print "cut image width,height,overall size:",width,height,width*height
+        width = width - 1
+        height = height - 1
     else:
         cut_image = Image.open(input_file)
         cut_image.convert("L") # Convert image to grayscale
@@ -759,6 +761,7 @@ if __name__ == "__main__":
             which_bit = bit_pixels(bit_shape=bit_to_use,diameter=float(bit_diameter)/scale)
             bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter),bit=which_bit)
     if input_file.upper().endswith("STL"):
+        #print which_bit.tolist()
         print "resolution of cut in pixels:",bottom.shape
         print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
         print "get the layer count we want"
