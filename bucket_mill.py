@@ -660,11 +660,14 @@ def get_parameters(parameters={}):
 
 if __name__ == "__main__":
     try:
-        parameters = get_parameters(parameters={"bit":"square","tidy":"GFXYZ","final-passes":"xy"})
+        parameters = get_parameters(parameters={"bit":"square","tidy":"GFXYZ","final-passes":"xy","stl-detail":"1"})
         input_file = parameters["image"]
         dimension_restricted = parameters["match"]
         dimension_measurement = parameters["size"]
-        thickness = parameters["depth"]
+        if input_file.upper().endswith("STL"):
+            stl_detail = float(parameters["stl-detail"])
+        else:
+            thickness = float(parameters["depth"])
         bit_diameter = parameters["bit-diameter"]
         pattern = parameters["method"]
         if parameters.has_key("output"):
@@ -683,17 +686,18 @@ if __name__ == "__main__":
         print '\tIf you do not define the output file, it will decide one based on the file name.'
         print '\t--final-passes="xy" will set both x cuts and y cuts for the final cut. You can choose x, y or xy.'
         print '\t--tidy="GFXYZ" chooses which gcode commands to reduce duplicates of'
+        print '\t--stl-detail sets the amount of dots per mm for imported STL files.'
         exit(1)
 
     print "input file: %s" % input_file
     print "dimension_restricted: %s" % dimension_restricted
     print "dimension_measurement: %s" % dimension_measurement
-    print "thickness: %s" % thickness
     print "bit diameter: %s" % bit_diameter
     print "pattern: %s" % pattern
     print "output file name: %s" % output_filename
 
     if input_file.upper().endswith("STL"):
+        print "STL detail: %f" % stl_detail
         your_mesh = mesh.Mesh.from_file(input_file)
         minx,miny,minz = ( your_mesh.x.min(),your_mesh.y.min(),your_mesh.z.min() )
         your_mesh.x = your_mesh.x - minx
@@ -706,11 +710,12 @@ if __name__ == "__main__":
         scale = 1.0
         thickness_precision=1
         if dimension_restricted.upper() in ["W","WIDTH"]:
-            scale = float(dimension_measurement)/maxx
+            scale = float(dimension_measurement)*stl_detail/maxx
         elif dimension_restricted.upper() in ["H","HEIGHT"]:
-            scale = float(dimension_measurement)/maxy
+            scale = float(dimension_measurement)*stl_detail/maxy
         your_mesh.x = your_mesh.x * scale
         your_mesh.y = your_mesh.y * scale
+        your_mesh.z = your_mesh.z * scale
         width,height = ( int(your_mesh.x.max()+1), int(your_mesh.y.max()+1) )
         bottom = zeros((width,height))
         for i in range(len(your_mesh.x)):
@@ -720,7 +725,7 @@ if __name__ == "__main__":
             bottom[int(x[0]),int(y[0])] = max(bottom[int(x[0]),int(y[0])], int(z[0]))
             bottom[int(x[1]),int(y[1])] = max(bottom[int(x[1]),int(y[1])], int(z[1]))
             bottom[int(x[2]),int(y[2])] = max(bottom[int(x[2]),int(y[2])], int(z[2]))
-            if (x.ptp() > 1) or (y.ptp() > 1) or (z.ptp() > 1):
+            if (x.ptp() > 1) or (y.ptp() > 1):
                 #the triangle dots are far enough apart, we should try to get 4 more dots and see if that helps
                 p1 = [x.mean(),y.mean(),z.mean()]
                 p2 = [x[:2].mean(),y[:2].mean(),z[:2].mean()]
@@ -728,11 +733,11 @@ if __name__ == "__main__":
                 p4 = [(x[0]+x[2])/2,(y[0]+y[2])/2,(z[0]+z[2])/2]
                 for p in [p1,p2,p3,p4]:
                     bottom[int(p[0]),int(p[1])] = max(bottom[int(p[0]),int(p[1])], int(p[2]))
-        bottom = bottom * scale
         print "cut image width,height,overall size:",width,height,width*height
         width = width - 1
         height = height - 1
     else:
+        print "thickness: %s" % thickness
         cut_image = Image.open(input_file)
         cut_image.convert("L") # Convert image to grayscale
         width, height = cut_image.size
@@ -756,7 +761,6 @@ if __name__ == "__main__":
         thickness_precision=10 #get 1/10 of a mm precision
         scale_to_use = 1.0
         safety = 0
-        thickness = float(thickness)
         if bit_to_use.upper() == "SQUARE":
             bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale)
         else:
@@ -773,8 +777,10 @@ if __name__ == "__main__":
         print "resolution of cut in pixels:",bottom.shape
         print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
         print "get the layer count we want"
-        bottom =  ( bottom.max()-bottom )* int(thickness_precision) - 1
+        #Z is already scaled
+        bottom =  ( bottom.max()-bottom ) - stl_detail
         print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
+        thickness_precision = 1/scale
     else:
         print "resolution of cut in pixels:",bottom.shape
         print "bottom goes from %i to %i" % (bottom.min(),bottom.max())
@@ -803,7 +809,7 @@ if __name__ == "__main__":
     print "TEST GCODE GENERATION"
     gcode = cut_to_gcode(cut_positions)
     if pattern.upper() == "FINAL":
-        print "scaling by %s,%s,%s" % (scale,scale,1.0/thickness)
+        print "scaling by %s,%s,%s" % (scale,scale,1.0/thickness_precision)
         gcode = alter_gcode(gcode,[("scale",(scale,scale,1.0/thickness_precision))],tidy=parameters["tidy"])
     else:
         print "cleaning up the gcode a little more"
