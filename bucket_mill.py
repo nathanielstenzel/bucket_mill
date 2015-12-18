@@ -475,6 +475,15 @@ def alter_gcode(gcode,adjustments,tidy="Z"):
                     ax *= sx
                     ay *= sy
                     az *= sz
+                elif command == "clip":
+                    x1,y1,z1,x2,y2,z2 = parameter
+                    ax = max(x1,ax)
+                    ay = max(y1,ay)
+                    az = max(z1,az)
+                    ax = min(x2,ax)
+                    ay = min(y2,ay)
+                    az = min(z2,az)
+                    
             altered_line = []
             ax = "%.02f" % ax
             ay = "%.02f" % ay
@@ -660,7 +669,7 @@ def get_parameters(parameters={}):
 
 if __name__ == "__main__":
     try:
-        parameters = get_parameters(parameters={"bit":"square","tidy":"GFXYZ","final-passes":"xy","stl-detail":"1"})
+        parameters = get_parameters(parameters={"bit":"square","tidy":"GFXYZ","final-passes":"xy","stl-detail":"1","min-stl-z":0})
         input_file = parameters["image"]
         dimension_restricted = parameters["match"]
         dimension_measurement = parameters["size"]
@@ -668,6 +677,7 @@ if __name__ == "__main__":
             stl_detail = float(parameters["stl-detail"])
         else:
             thickness = float(parameters["depth"])
+        min_stl_z = float(parameters["min-stl-z"])
         bit_diameter = parameters["bit-diameter"]
         pattern = parameters["method"]
         if parameters.has_key("output"):
@@ -718,6 +728,7 @@ if __name__ == "__main__":
         your_mesh.z = your_mesh.z * scale
         width,height = ( int(your_mesh.x.max()+1), int(your_mesh.y.max()+1) )
         bottom = zeros((width,height))
+        bottom = bottom +min_stl_z*stl_detail
         for i in range(len(your_mesh.x)):
             x = your_mesh.x[i]
             y = your_mesh.y[i]
@@ -806,7 +817,6 @@ if __name__ == "__main__":
         cut_positions = final(bottom,passes=parameters["final-passes"])
         #we should scale gcode down later
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
-    print "TEST GCODE GENERATION"
     gcode = cut_to_gcode(cut_positions)
     if pattern.upper() == "FINAL":
         print "scaling by %s,%s,%s" % (scale,scale,1.0/thickness_precision)
