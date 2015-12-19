@@ -1,5 +1,5 @@
 from PIL import Image
-from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ma,ones,sqrt,extract
+from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ma,ones,sqrt,extract,maximum,minimum,absolute
 from sys import argv
 from math import radians,cos,sin,tan
 from stl import mesh
@@ -798,12 +798,14 @@ if __name__ == "__main__":
     input_filter = parameters["input_filter"].lower()
     if  input_filter == "edge":
         ck = signal.cspline2d(bottom,8.0)
-        laplacian = array([[0,-1,0],[-1,4,-1],[0,-1,0]],float32)
+        laplacian = array([[0,1,0],[1,-4,1],[0,1,0]],float32)
         bottom = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
     elif input_filter == "bulge":
         ck = signal.cspline2d(bottom,8.0)
-        laplacian = array([[0,-1,0],[-1,4.1,-1],[0,-1,0]],float32)
-        bottom = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
+        laplacian = array([[0,1,0],[1,-3.9,1],[0,1,0]],float32)
+        bottom1 = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
+        bottom1 = absolute(bottom1)
+        bottom = bottom*0.1 + bottom1
     else:
         print "The input filter you asked for is not available, so we will not filter the input image."
         
