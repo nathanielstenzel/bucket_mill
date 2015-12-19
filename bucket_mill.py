@@ -303,7 +303,7 @@ def downsample_to_bit_diameter(image, scale, bit_diameter, bit="square"):
 def make_top(bottom):
     return zeros(bottom.shape,dtype=integer)
 
-def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed=400, rapid_speed=700, safe_distance=2,unit="mm",offsets=[0,0,0],minimum_stress=1,dedupe=False):
+def cut_to_gcode(cuts,cut_speed=500, z_cut_speed=300, z_rapid_speed=400, rapid_speed=700, safe_distance=2,unit="mm",offsets=[0,0,0],minimum_stress=1,dedupe=False,**kwargs):
     #if the next cut location is more than one space away, go to safe_distance before moving
     #if the next cut location is diagonal, go to safe_distance before moving
     #if the next cut depth is not as deep as the current depth, change to the new depth before moving
@@ -314,9 +314,18 @@ def cut_to_gcode(cuts,x=0,y=0,z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed
     for stress in range(6):
         calculated_speed = ( stress*cut_speed + (5-stress)*rapid_speed )/ 5
         calculated_cut_speeds.append(calculated_speed)
-        
+
+    local_params = locals()
     print "calculated cut speeds by stress:",calculated_cut_speeds
     gcode = []
+
+    #save the parameters to the gcode
+    for p in cut_to_gcode.func_code.co_varnames:
+        if local_params.has_key(p) and p not in ["cuts","kwargs"]:
+            gcode.append("(%s = %s)" % (p,local_params[p]))
+    for p in kwargs:
+        gcode.append("(%s = %s)" % (p,kwargs[p]))  
+        
     if unit.lower() == "mm":
         gcode.append("G21")
     elif unit.lower() == "inch":
@@ -643,7 +652,7 @@ if False: #turn this to True to do a simple test for fitting the shape of the bi
     print "OUT:",out
     exit()
 
-def get_parameters(parameters={}):
+def get_parameters(parameters={},do_not_eval=[]):
     if not parameters.has_key("misc"):
         parameters["misc"] = []
     params = argv[1:]
@@ -665,20 +674,34 @@ def get_parameters(parameters={}):
             exit(1)
         else:
             parameters["misc"].append( params.pop(0) )
-    return parameters
+    cleaned_parameters = {}
+    for k,v in parameters.iteritems():
+        if type(v) == str and k not in do_not_eval:
+            try:
+                cleaned_parameters[k.replace("-","_")] = eval(v,{},{})
+            except:
+                cleaned_parameters[k.replace("-","_")] = v
+        else:
+            cleaned_parameters[k.replace("-","_")] = v
+    return cleaned_parameters
 
 if __name__ == "__main__":
     try:
-        parameters = get_parameters(parameters={"bit":"square","tidy":"GFXYZ","final-passes":"xy","stl-detail":"1","min-stl-z":0})
+        parameters = get_parameters( parameters={ 
+            "bit":"square", "tidy":"GFXYZ", "final-passes":"xy", 
+            "stl-detail":"1", "min-stl-z":0,
+            "cut_speed":500, "z_cut_speed":300, "z_rapid_speed":400, "rapid_speed":700, 
+            "safe_distance":2, "offsets":"0,0,0", "minimum_stress":1, "adjustments":[] }, do_not_eval=["image","output"] )
         input_file = parameters["image"]
         dimension_restricted = parameters["match"]
         dimension_measurement = parameters["size"]
+        print type(parameters["adjustments"]),parameters["adjustments"]
         if input_file.upper().endswith("STL"):
-            stl_detail = float(parameters["stl-detail"])
+            stl_detail = parameters["stl_detail"]
         else:
-            thickness = float(parameters["depth"])
-        min_stl_z = float(parameters["min-stl-z"])
-        bit_diameter = parameters["bit-diameter"]
+            thickness = parameters["depth"]
+        min_stl_z = parameters["min_stl_z"]
+        bit_diameter = parameters["bit_diameter"]
         pattern = parameters["method"]
         if parameters.has_key("output"):
             output_filename = parameters["output"]
@@ -698,6 +721,9 @@ if __name__ == "__main__":
         print '\t--tidy="GFXYZ" chooses which gcode commands to reduce duplicates of'
         print '\t--stl-detail sets the amount of dots per mm for imported STL files.'
         exit(1)
+    finally:
+        if type(parameters["adjustments"]) != list:
+            print "I'm sorry, but I could not interpret your list of adjustments!"
 
     print "input file: %s" % input_file
     print "dimension_restricted: %s" % dimension_restricted
@@ -814,16 +840,18 @@ if __name__ == "__main__":
     elif pattern.upper() == "FINAL":
         print "MAKE A FINAL CUT"
         #we should first use a size 10-20 times larger than the mm of the item so we have good detail
-        cut_positions = final(bottom,passes=parameters["final-passes"])
+        cut_positions = final(bottom,passes=parameters["final_passes"])
         #we should scale gcode down later
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
-    gcode = cut_to_gcode(cut_positions)
+    gcode = cut_to_gcode(cut_positions,**parameters)
     if pattern.upper() == "FINAL":
         print "scaling by %s,%s,%s" % (scale,scale,1.0/thickness_precision)
-        gcode = alter_gcode(gcode,[("scale",(scale,scale,1.0/thickness_precision))],tidy=parameters["tidy"])
+        temp_adjustments = [("scale",(scale,scale,1.0/thickness_precision))]
+        temp_adjustments.extend(parameters["adjustments"])
+        gcode = alter_gcode(gcode,temp_adjustments,tidy=parameters["tidy"])
     else:
         print "cleaning up the gcode a little more"
-        gcode = alter_gcode(gcode,[],parameters["tidy"])
+        gcode = alter_gcode(gcode,parameters["adjustments"],parameters["tidy"])
     for line in gcode:
         output_file.write(line+"\r\n")
     output_file.close()
