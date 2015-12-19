@@ -1,9 +1,10 @@
 from PIL import Image
-from numpy import array,zeros,amax,int8,int16,int32,unique,roll,mgrid,ma,ones,sqrt,extract
+from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ma,ones,sqrt,extract
 from sys import argv
 from math import radians,cos,sin,tan
 from stl import mesh
 integer = int32
+from scipy import signal
 
 directions = {"up":[0,-1],"down":[0,+1],"left":[-1,0],"right":[+1,0],"center":[0,0]}
 
@@ -691,11 +692,10 @@ if __name__ == "__main__":
             "bit":"square", "tidy":"GFXYZ", "final-passes":"xy", 
             "stl-detail":"1", "min-stl-z":0,
             "cut_speed":500, "z_cut_speed":300, "z_rapid_speed":400, "rapid_speed":700, 
-            "safe_distance":2, "offsets":"0,0,0", "minimum_stress":1, "adjustments":[] }, do_not_eval=["image","output"] )
+            "safe_distance":2, "offsets":"0,0,0", "minimum_stress":1, "adjustments":[], "input-filter":"" }, do_not_eval=["image","output","input-filter"] )
         input_file = parameters["image"]
         dimension_restricted = parameters["match"]
         dimension_measurement = parameters["size"]
-        print type(parameters["adjustments"]),parameters["adjustments"]
         if input_file.upper().endswith("STL"):
             stl_detail = parameters["stl_detail"]
         else:
@@ -794,6 +794,19 @@ if __name__ == "__main__":
     if scale < 1.0:
         print "A scale of less than 1 causes bit matching to fail."
         print "This is why bit matching for STL files fails."
+
+    input_filter = parameters["input_filter"].lower()
+    if  input_filter == "edge":
+        ck = signal.cspline2d(bottom,8.0)
+        laplacian = array([[0,-1,0],[-1,4,-1],[0,-1,0]],float32)
+        bottom = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
+    elif input_filter == "bulge":
+        ck = signal.cspline2d(bottom,8.0)
+        laplacian = array([[0,-1,0],[-1,4.1,-1],[0,-1,0]],float32)
+        bottom = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
+    else:
+        print "The input filter you asked for is not available, so we will not filter the input image."
+        
     if pattern.upper() == "FINAL":
         thickness_precision=10 #get 1/10 of a mm precision
         scale_to_use = 1.0
