@@ -304,7 +304,7 @@ def downsample_to_bit_diameter(image, scale, bit_diameter, bit="square"):
 def make_top(bottom):
     return zeros(bottom.shape,dtype=integer)
 
-def cut_to_gcode(cuts,cut_speed=500, z_cut_speed=300, z_rapid_speed=400, rapid_speed=700, safe_distance=2,unit="mm",offsets=[0,0,0],minimum_stress=1,dedupe=False,**kwargs):
+def cut_to_gcode(cuts, x=0, y=0, z=0, cut_speed=500, z_cut_speed=300, z_rapid_speed=400, rapid_speed=700, safe_distance=2,unit="mm",offsets=[0,0,0],minimum_stress=1,dedupe=False,**kwargs):
     #if the next cut location is more than one space away, go to safe_distance before moving
     #if the next cut location is diagonal, go to safe_distance before moving
     #if the next cut depth is not as deep as the current depth, change to the new depth before moving
@@ -690,7 +690,7 @@ if __name__ == "__main__":
     try:
         parameters = get_parameters( parameters={ 
             "bit":"square", "tidy":"GFXYZ", "final-passes":"xy", 
-            "stl-detail":"1", "min-stl-z":0,
+            "stl-detail":"1", "min-stl-z":0, "max-stl-z":0,
             "cut_speed":500, "z_cut_speed":300, "z_rapid_speed":400, "rapid_speed":700, 
             "safe_distance":2, "offsets":"0,0,0", "minimum_stress":1, "adjustments":[], "input-filter":"" }, do_not_eval=["image","output","input-filter"] )
         input_file = parameters["image"]
@@ -770,6 +770,9 @@ if __name__ == "__main__":
                 p4 = [(x[0]+x[2])/2,(y[0]+y[2])/2,(z[0]+z[2])/2]
                 for p in [p1,p2,p3,p4]:
                     bottom[int(p[0]),int(p[1])] = max(bottom[int(p[0]),int(p[1])], int(p[2]))
+        max_z = parameters["max_stl_z"] * stl_detail
+        if max_z:
+            bottom = minimum(bottom,max_z)
         print "cut image width,height,overall size:",width,height,width*height
         width = width - 1
         height = height - 1
