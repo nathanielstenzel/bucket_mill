@@ -1,5 +1,5 @@
 from PIL import Image
-from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ma,ones,sqrt,extract,maximum,minimum,absolute
+from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ma,ones,sqrt,extract,maximum,minimum,absolute,where
 from sys import argv
 from math import radians,cos,sin,tan
 from stl import mesh
@@ -581,9 +581,26 @@ def trace(bottom):
                     #print "FAIL SEEK IN Z!"
     return cut_positions
 
+def filter_grid(grid,input_filter,min_value=0,size=5):
+    if  input_filter == "edge":
+        ck = signal.cspline2d(grid,8.0)
+        laplacian = array([[0,1,0],[1,-4,1],[0,1,0]],float32)
+        result = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
+    elif input_filter == "bulge":
+        ck = signal.cspline2d(grid,8.0)
+        laplacian = array([[0,1,0],[1,-3.9,1],[0,1,0]],float32)
+        grid1 = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
+        grid1 = absolute(grid1)
+        result = grid*0.1 + grid1
+    elif input_filter == "nearby": #this is just a boolean filter
+        mask = ones((size,size))
+        edge = signal.convolve2d(grid,mask,mode='same',boundary='symm')
+        result = (edge > (min_value*mask.size))
+    return result     
+
 def get_outline(bottom,depth):
-    base = bottom == depth
     above = bottom >= depth
+    base = bottom == depth
     #find out if there are dots in either of the 4 horizontal locations at the given depth
     u = roll(base,1,0) 
     d = roll(base,-1,0)
@@ -754,7 +771,7 @@ if __name__ == "__main__":
         your_mesh.z = your_mesh.z * scale
         width,height = ( int(your_mesh.x.max()+1), int(your_mesh.y.max()+1) )
         bottom = zeros((width,height))
-        bottom = bottom +min_stl_z*stl_detail
+        bottom = bottom -1
         for i in range(len(your_mesh.x)):
             x = your_mesh.x[i]
             y = your_mesh.y[i]
@@ -771,8 +788,15 @@ if __name__ == "__main__":
                 for p in [p1,p2,p3,p4]:
                     bottom[int(p[0]),int(p[1])] = max(bottom[int(p[0]),int(p[1])], int(p[2]))
         max_z = parameters["max_stl_z"] * stl_detail
+        do_not_cut = zeros(bottom.shape)
+        do_not_cut.fill(max_z)
+        bottom = maximum(bottom,min_stl_z*stl_detail)
+        bottom = where(filter_grid(bottom,min_value=(min_stl_z*stl_detail),input_filter='nearby',size=(2+2*bit_diameter)*stl_detail), bottom, do_not_cut)
         if max_z:
             bottom = minimum(bottom,max_z)
+        else:
+            max_z = max(bottom)
+
         print "cut image width,height,overall size:",width,height,width*height
         width = width - 1
         height = height - 1
@@ -799,7 +823,9 @@ if __name__ == "__main__":
         print "This is why bit matching for STL files fails."
 
     input_filter = parameters["input_filter"].lower()
-    if  input_filter == "edge":
+    if input_filter == "":
+        pass
+    elif  input_filter == "edge":
         ck = signal.cspline2d(bottom,8.0)
         laplacian = array([[0,1,0],[1,-4,1],[0,1,0]],float32)
         bottom = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
