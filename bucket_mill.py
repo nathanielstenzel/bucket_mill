@@ -20,7 +20,7 @@ def bit_pixels(bit_shape="cylinder",diameter=3):
         x, y = mgrid[:size, :size]
     sphere = (x - radius) ** 2 + (y - radius) ** 2
     circle_mask = ma.make_mask(sphere > radius**2) #true when outside the circle
-    high = ones((size,size))*10000
+    high = ones(circle_mask.shape)*10000
     if bit_shape in ["cylinder","ball","sphere"]:
         if bit_shape == "cylinder":
             output = circle_mask * high
