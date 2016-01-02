@@ -803,7 +803,7 @@ if __name__ == "__main__":
     else:
         print "thickness: %s" % thickness
         cut_image = Image.open(input_file)
-        cut_image.convert("L") # Convert image to grayscale
+        cut_image = cut_image.convert("L") # Convert image to grayscale
         width, height = cut_image.size
         cut_image = cut_image.transpose(Image.FLIP_TOP_BOTTOM) #The bottom left is 0,0 in the CNC, but the upper left is 0,0 in the image
         print len(cut_image.getdata())
