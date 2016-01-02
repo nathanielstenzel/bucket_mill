@@ -582,6 +582,7 @@ def trace(bottom):
     return cut_positions
 
 def filter_grid(grid,input_filter,min_value=0,size=5):
+    result = None
     if  input_filter == "edge":
         ck = signal.cspline2d(grid,8.0)
         laplacian = array([[0,1,0],[1,-4,1],[0,1,0]],float32)
@@ -795,7 +796,7 @@ if __name__ == "__main__":
         if max_z:
             bottom = minimum(bottom,max_z)
         else:
-            max_z = max(bottom)
+            max_z = bottom.max()
 
         print "cut image width,height,overall size:",width,height,width*height
         width = width - 1
@@ -818,25 +819,17 @@ if __name__ == "__main__":
     scale_to_use = scale
     safety = 1
     print "SCALE: %0.03f" % scale
-    if scale < 1.0:
-        print "A scale of less than 1 causes bit matching to fail."
-        print "This is why bit matching for STL files fails."
-
     input_filter = parameters["input_filter"].lower()
     if input_filter == "":
         pass
-    elif  input_filter == "edge":
-        ck = signal.cspline2d(bottom,8.0)
-        laplacian = array([[0,1,0],[1,-4,1],[0,1,0]],float32)
-        bottom = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
-    elif input_filter == "bulge":
-        ck = signal.cspline2d(bottom,8.0)
-        laplacian = array([[0,1,0],[1,-3.9,1],[0,1,0]],float32)
-        bottom1 = signal.convolve2d(ck,laplacian,mode='same',boundary='symm')
-        bottom1 = absolute(bottom1)
-        bottom = bottom*0.1 + bottom1
+    elif input_filter  == "nearby":
+        print '"nearby" is not a valid input-filter option. I am ignoring it.'
     else:
-        print "The input filter you asked for is not available, so we will not filter the input image."
+        result = filter_grid(bottom,input_filter)
+        if result != None:
+            bottom = result
+        else:
+            print "The input filter you asked for is not available, so we will not filter the input image."
         
     if pattern.upper() == "FINAL":
         thickness_precision=10 #get 1/10 of a mm precision
