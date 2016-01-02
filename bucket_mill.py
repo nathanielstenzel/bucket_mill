@@ -895,7 +895,13 @@ if __name__ == "__main__":
         gcode = alter_gcode(gcode,temp_adjustments,tidy=parameters["tidy"])
     else:
         print "cleaning up the gcode a little more"
-        gcode = alter_gcode(gcode,parameters["adjustments"],parameters["tidy"])
+        if input_file.upper().endswith("STL"):
+            print "THICKNESS PRECISION:",thickness_precision
+            temp_adjustments = [("scale",(1,1,1.0/thickness_precision))]
+        else:
+            temp_adjustments = []
+        temp_adjustments.extend(parameters["adjustments"])
+        gcode = alter_gcode(gcode,temp_adjustments,parameters["tidy"])
     for line in gcode:
         output_file.write(line+"\r\n")
     output_file.close()
