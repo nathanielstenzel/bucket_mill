@@ -708,9 +708,9 @@ if __name__ == "__main__":
     try:
         parameters = get_parameters( parameters={ 
             "bit":"square", "tidy":"GFXYZ", "final-passes":"xy", 
-            "stl-detail":"1", "min-stl-z":0, "max-stl-z":0,
-            "cut_speed":500, "z_cut_speed":300, "z_rapid_speed":400, "rapid_speed":700, 
-            "safe_distance":2, "offsets":"0,0,0", "minimum_stress":1, "adjustments":[], "input-filter":"" }, do_not_eval=["image","output","input-filter"] )
+            "stl-detail":"1", "min-stl-z":0, "max-stl-z":0, #"stl-padding":0,
+            "cut-speed":500, "z-cut-speed":300, "z-rapid_speed":400, "rapid-speed":700, 
+            "safe-distance":2, "offsets":"0,0,0", "minimum-stress":1, "adjustments":[], "input-filter":"" }, do_not_eval=["image","output","input-filter"] )
         input_file = parameters["image"]
         dimension_restricted = parameters["match"]
         dimension_measurement = parameters["size"]
@@ -729,15 +729,28 @@ if __name__ == "__main__":
         output_file = open(output_filename, "w")
     except:
         print 'USAGE: python bucket_mill.py -image "Best Mom Ever Heart3.gif" --match=width --size=200 --depth=20 --bit-diameter=3 --method=trace --output=test.gcode'
+        print '\tIf you do not define the output file, it will decide one based on the file name.'
+        print '\tAll measurements are in millimeters'
         print '\t--match must be set to "W" or "WIDTH" or "H" or "HEIGHT"'
         print '\t--size is the size of the width or height (whichever you specified in --match)'
-        print '\tAll measurements are in millimeters'
-        print '\tThe bit can be set by --bit="ball" other options are sphere (same thing), square (default), cylinder, v90 (or some other angle else than 90)'
+        print '\t--bit="ball" sets the shape of the end-mill bit. Other options are sphere (same thing), square (default), cylinder, v90 (or some other angle else than 90)'
         print '\t--method sets the milling pattern to use (trace or zigzag or final)'
-        print '\tIf you do not define the output file, it will decide one based on the file name.'
         print '\t--final-passes="xy" will set both x cuts and y cuts for the final cut. You can choose x, y or xy.'
         print '\t--tidy="GFXYZ" chooses which gcode commands to reduce duplicates of'
         print '\t--stl-detail sets the amount of dots per mm for imported STL files.'
+        print '\t--min-stl-z and --max-stl-z choose the minimum and maximum distance from the bottom of the object to consider.'
+        print '\t--cut-speed represents how fast you can move on the X,Y plane while cutting.'
+        print '\t--z-cut-speed represents how fast you can move on the Z axis while cutting.'
+        print '\t--rapid-speed represents how fast you can move on the X,Y plane while not cutting.'
+        print '\t--z-rapid-speed represents how fast you can move on the Z axis while not cutting.'
+        print '\t--minimum-stress helps tune the automated speed adjustment. Stress levels are 0-5 where 0 means there is nothing to cut.'
+        print '\t\tThe bit stress calculation is not perfect. Be careful when setting your speeds and minimum-stress so that you cut slow enough at all times.'
+        print '\t--safe-distance represents how far above the top of the object you must be when making X,Y moves to insure you do not cut or scrape the top.'
+        print '\t--offsets=0,0,0 represents an X,Y,Z offset for cutting. The offset is added to the cut coordinates.'
+        print '\t--adjustments="[(\'scale\',(0.5,0.5,0.5))]" is an example of saying to scale the cut instructions to 50% after they are made.'
+        print '\t\tThere is also (\'rotate\',(d)) and (\'translate\',(x,y,z)) and (\'scale\',(x,y,z)) and (\'clip\',(x1,y1,z1,x2,y2,z2)).'
+        print '\t\tTo scale and rotate, do --adjustments="[(\'scale\',(0.5,0.5,0.5)),(\'rotate\',(d))]".'
+        print '\t\tDo not forget the quotes and single quotes. It does not matter if you swap the use of them though.'
         exit(1)
     finally:
         if type(parameters["adjustments"]) != list:
