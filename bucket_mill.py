@@ -1,5 +1,5 @@
 from PIL import Image
-from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ma,ones,sqrt,extract,maximum,minimum,absolute,where
+from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ma,ones,sqrt,extract,maximum,minimum,absolute,where,concatenate
 from sys import argv
 from math import radians,cos,sin,tan
 from stl import mesh
@@ -7,6 +7,37 @@ integer = int32
 from scipy import signal
 
 directions = {"up":[0,-1],"down":[0,+1],"left":[-1,0],"right":[+1,0],"center":[0,0]}
+
+"""
+def points_on_triangle(points,normal):
+	p1,p2,p3 = points
+	a,b,c = normal
+	xslope = a/c
+	yslope = b/c
+	basez = -xslope*x1 - yslope*y1 -z1*c
+	#we need to figure xmin,xmax,ymin,ymax
+	#we also need to be able to tell when we are within the x,y area of the triangle
+	for y in range(ymin,ymax+1):
+		for x in range(xmin,xmax+1):
+			z = basez + x*xslope + y*yslope
+"""
+
+def mesh_on_or_between_z(source_mesh,min_z,max_z):
+	#this will quickly give all the triangles at a given Z
+	the_filter = (source_mesh.z>=min_z).any(1) & (source_mesh.z<=max_z).any(1)
+	count = the_filter.sum()
+	data = zeros(count, dtype=mesh.Mesh.dtype)
+	new_mesh = mesh.Mesh(data, remove_empty_areas=False)
+	new_mesh.vectors = source_mesh.vectors[the_filter]
+	return new_mesh
+
+def mesh_at_z(source_mesh,target_z):
+	return mesh_on_or_between_z(source_mesh,target_z,target_z)
+
+def lines_at_z(source_mesh,target_z):
+	work_mesh = mesh_at_z(source_mesh,target_z)
+	#now try to figure out how to get the lines from each triangle for where the z plane intersects the triangles
+
 
 def bit_pixels(bit_shape="cylinder",diameter=3):
     radius = diameter/2.0
