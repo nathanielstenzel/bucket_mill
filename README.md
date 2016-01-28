@@ -10,3 +10,5 @@ I have zigzag and trace style rough cuts. I have ball/sphere, cylinder and V bit
 These algorithms might not take advantage of the idea that the dremel bit cuts more than 1 mm at a time. After it does, it should be a bit faster.
 
 The measurements are assumed to be in milimeters.
+
+If you like this project, you could go to https://www.paypal.me/NathanielStenzel to send me money as a thanks...if you want to.
