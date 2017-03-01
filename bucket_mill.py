@@ -8,6 +8,7 @@ from scipy import signal
 
 directions = {"up":[0,-1],"down":[0,+1],"left":[-1,0],"right":[+1,0],"center":[0,0]}
 
+
 """
 def points_on_triangle(points,normal):
 	p1,p2,p3 = points
@@ -22,14 +23,15 @@ def points_on_triangle(points,normal):
 			z = basez + x*xslope + y*yslope
 """
 
+	
 def mesh_on_or_between_z(source_mesh,min_z,max_z):
 	#this will quickly give all the triangles at a given Z
 	the_filter = (source_mesh.z>=min_z).any(1) & (source_mesh.z<=max_z).any(1)
 	count = the_filter.sum()
-	data = zeros(count, dtype=mesh.Mesh.dtype)
 	new_mesh = mesh.Mesh(data, remove_empty_areas=False)
 	new_mesh.vectors = source_mesh.vectors[the_filter]
 	return new_mesh
+
 
 def mesh_at_z(source_mesh,target_z):
 	return mesh_on_or_between_z(source_mesh,target_z,target_z)
@@ -37,7 +39,6 @@ def mesh_at_z(source_mesh,target_z):
 def lines_at_z(source_mesh,target_z):
 	work_mesh = mesh_at_z(source_mesh,target_z)
 	#now try to figure out how to get the lines from each triangle for where the z plane intersects the triangles
-
 
 def bit_pixels(bit_shape="cylinder",diameter=3):
     radius = diameter/2.0
@@ -205,6 +206,7 @@ def zigzag_layer(layer,xin,yin,this_depth):
     stress = measure["stress"]
     #print "A",measure
     save_points = [[x,y,this_depth]]
+
     while measure["overall"]:
         last_stress = stress
         stress = measure["stress"]
@@ -272,28 +274,28 @@ def zigzag_layer(layer,xin,yin,this_depth):
     #positions.append("#ending at %s,%s" % (x,y))
     return x,y,positions
 
-def downsample_to_bit_diameter(image, scale, bit_diameter, bit="square"):
+def downsample_to_bit_diameter(image, scale, bit_diameter, bit_shape="square"):
     #print image.shape
     bit_diameter = int(bit_diameter)
     height,width = image.shape
-    scaled_width = width*scale
-    scaled_height = height*scale
+    scaled_width = int(width*scale)
+    scaled_height = int(height*scale)
     output = zeros((scaled_height,scaled_width),dtype=integer)
     #coordinates are height,width
     print "output is %s" % str(output.shape)
     print "target width, target height, scale = ",scaled_width,scaled_height,scale
     #print "downsample_to_bit_diamter width=%i height=%i" % (width,height)
     #print "downsample_to_bit_diameter shape:", output.shape
-    #print len(image[::bit_diameter,::bit-_diameter].tolist()[0])
+    #print len(image[::bit_diameter,::bit_diameter].tolist()[0])
     #print "bit_diameter:",bit_diameter
     for y in range(int(scaled_height)):
         for x in range(int(scaled_width)):
             #print "%s:%s,%s:%s = %s" % ( (y)/scale,(y+bit_diameter)/scale,x/scale,(x+bit_diameter)/scale,amax(image[(y)/scale:(y+bit_diameter)/scale,x/scale:(x+bit_diameter)/scale]))
-            left = (x-bit_diameter/2)/scale
-            right = (x+bit_diameter/2+1)/scale
-            top = (y-bit_diameter/2)/scale
-            bottom = (y+bit_diameter/2+1)/scale
-            if bit == "square":
+            left = int((x-bit_diameter/2)/scale)
+            right = int((x+bit_diameter/2+1)/scale)
+            top = int((y-bit_diameter/2)/scale)
+            bottom = int((y+bit_diameter/2+1)/scale)
+            if bit_shape == "square":
                 left = max( left,  0)
                 right = min( right,  width)
                 top = max( top, 0)
@@ -312,7 +314,7 @@ def downsample_to_bit_diameter(image, scale, bit_diameter, bit="square"):
                 surface_subset = image[top:bottom,left:right]
                 #print "surface:",surface_subset
                 surface_subset = surface_subset.flatten()
-                bit_subset = extract(mask_for_bit_check,bit)
+                bit_subset = extract(mask_for_bit_check,bit_shape)
                 #print "surface:",surface_subset.tolist()
                 #print "bit:",bit_subset.tolist()
                 #print dir(bit_subset)
@@ -782,6 +784,7 @@ if __name__ == "__main__":
         print '\t\tThere is also (\'rotate\',(d)) and (\'translate\',(x,y,z)) and (\'scale\',(x,y,z)) and (\'clip\',(x1,y1,z1,x2,y2,z2)).'
         print '\t\tTo scale and rotate, do --adjustments="[(\'scale\',(0.5,0.5,0.5)),(\'rotate\',(d))]".'
         print '\t\tDo not forget the quotes and single quotes. It does not matter if you swap the use of them though.'
+        raise
         exit(1)
     finally:
         if type(parameters["adjustments"]) != list:
@@ -801,6 +804,8 @@ if __name__ == "__main__":
         your_mesh.x = your_mesh.x - minx
         your_mesh.y = your_mesh.y - miny
         your_mesh.z = your_mesh.z - minz
+
+        print "There are %i total triangles." % len(your_mesh)
         print "Z:",your_mesh.z.min(),your_mesh.z.max()
         #your_mesh.z = 1+255.0/your_mesh.z.max() * your_mesh.z
         minx,maxx,miny,maxy = ( your_mesh.x.min(),your_mesh.x.max(),your_mesh.y.min(),your_mesh.y.max() )
@@ -883,13 +888,13 @@ if __name__ == "__main__":
             bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale)
         else:
             which_bit = bit_pixels(bit_shape=bit_to_use,diameter=float(bit_diameter)/scale)
-            bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale,bit=which_bit)
+            bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter)/scale,bit_shape=which_bit)
     else:
         if bit_to_use.upper() == "SQUARE":
             bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter))
         else:
             which_bit = bit_pixels(bit_shape=bit_to_use,diameter=float(bit_diameter)/scale)
-            bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter),bit=which_bit)
+            bottom = downsample_to_bit_diameter(bottom,scale_to_use,float(bit_diameter),bit_shape=which_bit)
     if input_file.upper().endswith("STL"):
         #print which_bit.tolist()
         print "resolution of cut in pixels:",bottom.shape
