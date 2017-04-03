@@ -11,4 +11,6 @@ These algorithms might not take advantage of the idea that the dremel bit cuts m
 
 The measurements are assumed to be in milimeters.
 
+See the wiki and the issues on github before using this software so that you will know what may be broken or needing improvement.
+
 If you like this project, you could go to https://www.paypal.me/NathanielStenzel to send me money as a thanks...if you want to.
