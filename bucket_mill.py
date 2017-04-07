@@ -8,7 +8,6 @@ from scipy import signal
 
 directions = {"up":[0,-1],"down":[0,+1],"left":[-1,0],"right":[+1,0],"center":[0,0]}
 
-
 """
 def points_on_triangle(points,normal):
 	p1,p2,p3 = points
@@ -23,7 +22,6 @@ def points_on_triangle(points,normal):
 			z = basez + x*xslope + y*yslope
 """
 
-	
 def mesh_on_or_between_z(source_mesh,min_z,max_z):
 	#this will quickly give all the triangles at a given Z
 	the_filter = (source_mesh.z>=min_z).any(1) & (source_mesh.z<=max_z).any(1)
@@ -32,7 +30,6 @@ def mesh_on_or_between_z(source_mesh,min_z,max_z):
 	new_mesh.vectors = source_mesh.vectors[the_filter]
 	return new_mesh
 
-
 def mesh_at_z(source_mesh,target_z):
 	return mesh_on_or_between_z(source_mesh,target_z,target_z)
 
@@ -40,6 +37,27 @@ def lines_at_z(source_mesh,target_z):
 	work_mesh = mesh_at_z(source_mesh,target_z)
 	#now try to figure out how to get the lines from each triangle for where the z plane intersects the triangles
 
+"""	
+>>> a = numpy.array([[1,4,8],[3,6,9],[6,7,7]])
+>>> high=(a>5) #above the Z plane
+>>> count = high.sum(1)
+>>> (count == 1) | (count == 2) #crosses the Z plane, but does not go along the Z plane
+array([ True,  True, False], dtype=bool)
+
+If we know the triangle crosses the Z, we could assume that any counts of 0 would be going along the Z plane.
+If not, we can check counts of 0 to see if some or all of the points are below.
+
+The function I make for testing Z could be copied and adjusted to get high(>=Z) and low(<=Z) counts. If (high + low) > 3  then at least one point is on the Z plane. If high < 1 or low < 1 then the triangle is not crossing the Z plane.
+"""
+
+def triangle_mesh_d(source_mesh):
+	#AX+BY+CZ+D=0 where X,Y,Z is the point and A,B,C is the normal
+	#the 3 points of a triangle would have the same D, so figure on the first point
+	#return D for each triangle
+	return -(source_mesh.normals * source_mesh.points[:,:3]).sum(1)
+	#the idea is that once you know the D value, AX+BY+D=-CZ so -(AX+BY+D)/C = Z
+	#with that math in mind, you could try to interpolate any Z on a triangle as long as you know you are on the triangle
+	
 def bit_pixels(bit_shape="cylinder",diameter=3):
     radius = diameter/2.0
     if diameter % 2:
@@ -312,7 +330,6 @@ def downsample_to_bit_diameter(image, scale, bit_diameter, bit_shape="square"):
                 top = max( top, 0)
                 bottom = min( bottom, height)
                 surface_subset = image[top:bottom,left:right]
-                #print "surface:",surface_subset
                 surface_subset = surface_subset.flatten()
                 bit_subset = extract(mask_for_bit_check,bit_shape)
                 #print "surface:",surface_subset.tolist()
@@ -820,15 +837,15 @@ if __name__ == "__main__":
         your_mesh.y = your_mesh.y * scale
         your_mesh.z = your_mesh.z * scale
         width,height = ( int(your_mesh.x.max()+1), int(your_mesh.y.max()+1) )
-        bottom = zeros((width,height))
+        bottom = zeros((height,width))
         bottom = bottom -1
         for i in range(len(your_mesh.x)):
             x = your_mesh.x[i]
             y = your_mesh.y[i]
             z = your_mesh.z[i]
-            bottom[int(x[0]),int(y[0])] = max(bottom[int(x[0]),int(y[0])], int(z[0]))
-            bottom[int(x[1]),int(y[1])] = max(bottom[int(x[1]),int(y[1])], int(z[1]))
-            bottom[int(x[2]),int(y[2])] = max(bottom[int(x[2]),int(y[2])], int(z[2]))
+            bottom[int(y[0]),int(x[0])] = max(bottom[int(y[0]),int(x[0])], int(z[0]))
+            bottom[int(y[1]),int(x[1])] = max(bottom[int(y[1]),int(x[1])], int(z[1]))
+            bottom[int(y[2]),int(x[2])] = max(bottom[int(y[2]),int(x[2])], int(z[2]))
             if (x.ptp() > 1) or (y.ptp() > 1):
                 #the triangle dots are far enough apart, we should try to get 4 more dots and see if that helps
                 p1 = [x.mean(),y.mean(),z.mean()]
@@ -836,7 +853,7 @@ if __name__ == "__main__":
                 p3 = [x[1:].mean(),y[1:].mean(),z[1:].mean()]
                 p4 = [(x[0]+x[2])/2,(y[0]+y[2])/2,(z[0]+z[2])/2]
                 for p in [p1,p2,p3,p4]:
-                    bottom[int(p[0]),int(p[1])] = max(bottom[int(p[0]),int(p[1])], int(p[2]))
+                    bottom[int(p[1]),int(p[0])] = max(bottom[int(p[1]),int(p[0])], int(p[2]))
         max_z = parameters["max_stl_z"] * stl_detail
         do_not_cut = zeros(bottom.shape)
         do_not_cut.fill(max_z)
