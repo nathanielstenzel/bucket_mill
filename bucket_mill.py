@@ -293,6 +293,7 @@ def zigzag_layer(layer,xin,yin,this_depth):
     return x,y,positions
 
 def downsample_to_bit_diameter(image, scale, bit_diameter, bit_shape="square"):
+	#this does not just have the ability to downsample the image. It also raises each point to the highest point under the bit.
     #print image.shape
     bit_diameter = int(bit_diameter)
     height,width = image.shape
@@ -395,6 +396,7 @@ def cut_to_gcode(cuts, x=0, y=0, z=0, cut_speed=500, z_cut_speed=300, z_rapid_sp
         else:
             command = "dot"
             cut = ["dot",cut]
+        print cut
         calculated_speed = cut_speed #default to the slow cuts
         #print "CUT[0]:",cut[0]
         if cut == "seek":
@@ -452,23 +454,23 @@ def cut_to_gcode(cuts, x=0, y=0, z=0, cut_speed=500, z_cut_speed=300, z_rapid_sp
                 calculated_speed = calculated_cut_speeds[stress]
             else:
                 calculated_speed = cut_speed
-            start = cut[1]
-            travel = abs(start[0]-x) + abs(start[1]-y)
+            end = cut[1]
+            travel = abs(end[0]-x) + abs(end[1]-y)
             if travel > 1:
                 gcode.append("G0 F%i Z%.3f" % (z_rapid_speed,safe_distance))
-                gcode.append("G0 F%i X%.3f Y%.3f" % (rapid_speed,offsets[0]+start[0],offsets[1]+start[1]))
-                z = safe_distance
-            elif z > start[2]: #we must go up
-                #print z,offsets[2]-cut[2]
-                gcode.append("G0 F%i Z%.3f" % (z_rapid_speed,offsets[2]-start[2]))
-                gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
-                z = start[2]
+                gcode.append("G0 F%i X%.3f Y%.3f" % (rapid_speed,offsets[0]+end[0],offsets[1]+end[1]))
+                gcode.append("G1 F%i Z%.3f" % (z_rapid_speed,offsets[2]-end[2]))
+                z = end[2]
+            elif z > end[2]: #we must go up. else than in gcode, positive numbers are down
+                gcode.append("G0 F%i Z%.3f" % (z_rapid_speed,offsets[2]-end[2]))
+                gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+end[0],offsets[1]+end[1]))
+                z = end[2]
             else:
-                gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+start[0],offsets[1]+start[1]))
-                z = start[2]
-            if z != start[2]:
-                gcode.append("G1 F%i Z%.3f" % (z_cut_speed,offsets[2]-start[2]))
-            x,y,z = start
+                gcode.append("G1 F%i X%.3f Y%.3f" % (calculated_speed,offsets[0]+end[0],offsets[1]+end[1]))
+            if z != end[2]:
+                gcode.append("G1 F%i Z%.3f" % (z_cut_speed,offsets[2]-end[2]))
+                z = end[2]
+            x,y,z = end
         elif command == "simple":
             offset_x,offset_y,offset_z = offsets
             x,y,z = cut[1]
