@@ -396,7 +396,7 @@ def cut_to_gcode(cuts, x=0, y=0, z=0, cut_speed=500, z_cut_speed=300, z_rapid_sp
         else:
             command = "dot"
             cut = ["dot",cut]
-        print cut
+        #print cut
         calculated_speed = cut_speed #default to the slow cuts
         #print "CUT[0]:",cut[0]
         if cut == "seek":
