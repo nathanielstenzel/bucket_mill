@@ -583,6 +583,12 @@ def zigzag(bottom):
         if (layer == False).all():
             print depth,"of",bottom.max()
             top = top.clip(depth,bottom)
+            if ((depth+cut_depth) < bottom.max()).any():
+                depth += cut_depth
+                layer = (bottom - cut_depth) >= top
+            else:
+                depth += 1
+                layer = bottom > top
             depth += 1
             layer = bottom > top
             start_position = find_nearby_dot(layer,x,y)
@@ -597,7 +603,7 @@ def zigzag(bottom):
                     #print "FAIL SEEK IN Z!"
     return cut_positions
 
-def trace(bottom):
+def trace(bottom,cut_depth=1):
     top = make_top(bottom)
     cut_positions = []
     layer = bottom > top
@@ -619,8 +625,12 @@ def trace(bottom):
         if (layer == False).all():
             print depth,"of",bottom.max()
             top = top.clip(depth,bottom)
-            depth += 1
-            layer = bottom > top
+            if ((depth+cut_depth) < bottom.max()).any():
+                depth += cut_depth
+                layer = (bottom - cut_depth) >= top
+            else:
+                depth += 1
+                layer = bottom > top
             start_position = find_nearby_dot(layer,x,y)
         else:
             start_position = find_nearby_dot(layer,x,y)
@@ -762,7 +772,7 @@ if __name__ == "__main__":
             "bit":"square", "tidy":"GFXYZ", "final-passes":"xy", 
             "stl-detail":"1", "min-stl-z":0, "max-stl-z":0, #"stl-padding":0,
             "cut-speed":500, "z-cut-speed":300, "z-rapid_speed":400, "rapid-speed":700, 
-            "safe-distance":2, "offsets":"0,0,0", "minimum-stress":1, "adjustments":[], "input-filter":"" }, do_not_eval=["image","output","input-filter"] )
+            "safe-distance":2, "cut-depth":1, "offsets":"0,0,0", "minimum-stress":1, "adjustments":[], "input-filter":"" }, do_not_eval=["image","output","input-filter"] )
         input_file = parameters["image"]
         dimension_restricted = parameters["match"]
         dimension_measurement = parameters["size"]
@@ -773,6 +783,7 @@ if __name__ == "__main__":
         min_stl_z = parameters["min_stl_z"]
         bit_diameter = parameters["bit_diameter"]
         pattern = parameters["method"]
+        cut_depth = parameters["cut_depth"]
         if parameters.has_key("output"):
             output_filename = parameters["output"]
         else:
@@ -796,6 +807,7 @@ if __name__ == "__main__":
         print '\t--rapid-speed represents how fast you can move on the X,Y plane while not cutting.'
         print '\t--z-rapid-speed represents how fast you can move on the Z axis while not cutting.'
         print '\t--minimum-stress helps tune the automated speed adjustment. Stress levels are 0-5 where 0 means there is nothing to cut.'
+        print '\t--cut-depth (default 1) is the depth to cut each rough pass'
         print '\t\tThe bit stress calculation is not perfect. Be careful when setting your speeds and minimum-stress so that you cut slow enough at all times.'
         print '\t--safe-distance represents how far above the top of the object you must be when making X,Y moves to insure you do not cut or scrape the top.'
         print '\t--offsets=0,0,0 represents an X,Y,Z offset for cutting. The offset is added to the cut coordinates.'
@@ -940,7 +952,7 @@ if __name__ == "__main__":
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
     elif pattern.upper() == "TRACE":
         print "TRACE AROUND THE EDGES, ONE LAYER AT A TIME"
-        cut_positions = trace(bottom)
+        cut_positions = trace(bottom,cut_depth)
         print "We had %i cuts and %i seeks." % (len(cut_positions)-cut_positions.count("seek"), cut_positions.count("seek"))
     elif pattern.upper() == "FINAL":
         print "MAKE A FINAL CUT"
