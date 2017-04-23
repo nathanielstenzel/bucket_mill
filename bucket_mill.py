@@ -656,7 +656,7 @@ def filter_grid(grid,input_filter,min_value=0,size=5):
         grid1 = absolute(grid1)
         result = grid*0.1 + grid1
     elif input_filter == "nearby": #this is just a boolean filter
-        mask = ones((size,size))
+        mask = ones((int(size),int(size)))
         edge = signal.convolve2d(grid,mask,mode='same',boundary='symm')
         result = (edge > (min_value*mask.size))
     return result     
@@ -851,7 +851,7 @@ if __name__ == "__main__":
         your_mesh.y = your_mesh.y * scale
         your_mesh.z = your_mesh.z * scale
         width,height = ( int(your_mesh.x.max()+1), int(your_mesh.y.max()+1) )
-        bottom = zeros((height+2*bit_diameter,width+2*bit_diameter))
+        bottom = zeros((int(height+2*bit_diameter),int(width+2*bit_diameter)))
         bottom = bottom -1
         for i in range(len(your_mesh.x)):
             x = your_mesh.x[i]+bit_diameter
