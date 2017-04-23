@@ -870,7 +870,10 @@ if __name__ == "__main__":
                     bottom[int(p[1]),int(p[0])] = max(bottom[int(p[1]),int(p[0])], int(p[2]))
         max_z = parameters["max_stl_z"] * stl_detail
         do_not_cut = zeros(bottom.shape)
-        do_not_cut.fill(max_z)
+        if max_z:
+            do_not_cut.fill( max_z )
+        else:
+            do_not_cut.fill( bottom.max() )
         bottom = maximum(bottom,min_stl_z*stl_detail)
         bottom = where(filter_grid(bottom,min_value=(min_stl_z*stl_detail),input_filter='nearby',size=(3+2*bit_diameter)*stl_detail), bottom, do_not_cut)
         if max_z:
