@@ -851,11 +851,11 @@ if __name__ == "__main__":
         your_mesh.y = your_mesh.y * scale
         your_mesh.z = your_mesh.z * scale
         width,height = ( int(your_mesh.x.max()+1), int(your_mesh.y.max()+1) )
-        bottom = zeros((height,width))
+        bottom = zeros((height+2*bit_diameter,width+2*bit_diameter))
         bottom = bottom -1
         for i in range(len(your_mesh.x)):
-            x = your_mesh.x[i]
-            y = your_mesh.y[i]
+            x = your_mesh.x[i]+bit_diameter
+            y = your_mesh.y[i]+bit_diameter
             z = your_mesh.z[i]
             bottom[int(y[0]),int(x[0])] = max(bottom[int(y[0]),int(x[0])], int(z[0]))
             bottom[int(y[1]),int(x[1])] = max(bottom[int(y[1]),int(x[1])], int(z[1]))
@@ -872,7 +872,7 @@ if __name__ == "__main__":
         do_not_cut = zeros(bottom.shape)
         do_not_cut.fill(max_z)
         bottom = maximum(bottom,min_stl_z*stl_detail)
-        bottom = where(filter_grid(bottom,min_value=(min_stl_z*stl_detail),input_filter='nearby',size=(2+2*bit_diameter)*stl_detail), bottom, do_not_cut)
+        bottom = where(filter_grid(bottom,min_value=(min_stl_z*stl_detail),input_filter='nearby',size=(3+2*bit_diameter)*stl_detail), bottom, do_not_cut)
         if max_z:
             bottom = minimum(bottom,max_z)
         else:
