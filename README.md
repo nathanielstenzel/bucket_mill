@@ -7,8 +7,6 @@ I first came up with the idea for this project when I saw that the tool path tha
 
 I have zigzag and trace style rough cuts. I have ball/sphere, cylinder and V bit (you set the angle) final cuts.
 
-These algorithms might not take advantage of the idea that the dremel bit cuts more than 1 mm at a time. After it does, it should be a bit faster.
-
 The measurements are assumed to be in milimeters.
 
 See the wiki and the issues on github before using this software so that you will know what may be broken or needing improvement.
