@@ -493,6 +493,7 @@ def alter_gcode(gcode,adjustments,tidy="Z"):
     #put whatever letters in tidy...FGXYZ
     tidy = tidy.upper()
     altered_gcode = []
+    altered_parts = []
     translate = False
     f = g = x = y = z = 0
     ax = ay = az = 0 #altered
@@ -560,10 +561,25 @@ def alter_gcode(gcode,adjustments,tidy="Z"):
                 altered_line.append("Y%s" % ay)
             if "Z" not in tidy or az != laz:
                 altered_line.append("Z%s" % az)
+            altered_parts.append("")
+            if g != lg:
+                altered_parts[-1] += "G"
+            if f != lf:
+                altered_parts[-1] += "F"
+            if ax != lax:
+                altered_parts[-1] += "X"
+            if ay != lay:
+                altered_parts[-1] += "Y"
+            if az != laz:
+                altered_parts[-1] += "Z"
             lg,lf,lax,lay,laz = g,f,ax,ay,az
             altered_line = " ".join(altered_line)
             if altered_line.strip():
                 altered_gcode.append(altered_line)
+            altered_parts = altered_parts[-3:]
+            if "".join(altered_parts) in ["XXX","YYY","ZZZ","FFF","GGG"]:
+                #if the last three things to change were the same thing, pop out the change before last
+                altered_gcode.pop(-2)
     return altered_gcode
 
 def zigzag(bottom):
