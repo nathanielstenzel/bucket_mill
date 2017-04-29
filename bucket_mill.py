@@ -374,7 +374,8 @@ def cut_to_gcode(cuts, x=0, y=0, z=0, cut_speed=500, z_cut_speed=300, z_rapid_sp
     #save the parameters to the gcode
     for p in cut_to_gcode.func_code.co_varnames:
         if local_params.has_key(p) and p not in ["cuts","kwargs"]:
-            gcode.append("(%s = %s)" % (p,local_params[p]))
+            comment = "%s = %s" % (p,local_params[p])
+            gcode.append( "(%s)" % comment.replace("(","[").replace(")","]") )
     for p in kwargs:
         gcode.append("(%s = %s)" % (p,kwargs[p]))  
         
