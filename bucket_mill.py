@@ -383,7 +383,7 @@ def cut_to_gcode(cuts, x=0, y=0, z=0, cut_speed=500, z_cut_speed=300, z_rapid_sp
         gcode.append("G21")
     elif unit.lower() == "inch":
         gcode.append("G20")
-    gcode.append("G17 G90 G64 M3 S3000 M7")
+    gcode.append("G17 G90 M3 S3000")
     gcode.append("G0 X0 Y0 F%f" % rapid_speed)
     gcode.append("G0 Z0 F%f" % z_rapid_speed)
     gcode.append("G1 X0 Y0 F%f" % cut_speed)
