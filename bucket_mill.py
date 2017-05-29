@@ -1,7 +1,7 @@
 from PIL import Image
-from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ma,ones,sqrt,extract,maximum,minimum,absolute,where,concatenate
+from numpy import array,zeros,amax,int8,int16,int32,float32,unique,roll,mgrid,ogrid,ma,ones,sqrt,extract,maximum,minimum,absolute,where,concatenate,linspace
 from sys import argv
-from math import radians,cos,sin,tan
+from math import radians,cos,sin,tan,hypot
 from stl import mesh
 integer = int32
 from scipy import signal
@@ -878,13 +878,61 @@ if __name__ == "__main__":
             bottom[int(y[1]),int(x[1])] = max(bottom[int(y[1]),int(x[1])], int(z[1]))
             bottom[int(y[2]),int(x[2])] = max(bottom[int(y[2]),int(x[2])], int(z[2]))
             if (x.ptp() > 1) or (y.ptp() > 1):
-                #the triangle dots are far enough apart, we should try to get 4 more dots and see if that helps
-                p1 = [x.mean(),y.mean(),z.mean()]
-                p2 = [x[:2].mean(),y[:2].mean(),z[:2].mean()]
-                p3 = [x[1:].mean(),y[1:].mean(),z[1:].mean()]
-                p4 = [(x[0]+x[2])/2,(y[0]+y[2])/2,(z[0]+z[2])/2]
-                for p in [p1,p2,p3,p4]:
-                    bottom[int(p[1]),int(p[0])] = max(bottom[int(p[1]),int(p[0])], int(p[2]))
+                right = {}
+                left = {}
+                up = {}
+                down = {}
+                strength_range = int(max(x.ptp(),y.ptp(),z.ptp()))*2+2
+                for a,b in [[0,1],[0,2],[1,2]]:
+                    xs = linspace(x[a],x[b],strength_range)
+                    ys = linspace(y[a],y[b],strength_range)
+                    zs = linspace(z[a],z[b],strength_range)
+                    for d in range(strength_range):
+                        dx = int(xs[d])
+                        dy = int(ys[d])
+                        dz = int(zs[d])
+                        #do left and right
+                        if dy not in right:
+                            right[dy] = [dx,dz]
+                        elif dx > right[dy][0]:
+                            right[dy] = [dx,dz]
+                        elif right[dy][0] == dx and dz > right[dy][1]:
+                            right[dy] = [dx,dz]
+                        if dy not in left:
+                            left[dy] = [dx,dz]
+                        elif dx < left[dy][0]:
+                            left[dy] = [dx,dz]
+                        elif left[dy][0] == dx and dz > left[dy][1]:
+                            left[dy] = [dx,dz]
+                        #do top and bottom
+                        if dx not in up:
+                            up[dx] = [dy,dz]
+                        elif dy < up[dx][0]:
+                            up[dx] = [dy,dz]
+                        elif up[dx][0] == dy and dz > up[dx][1]:
+                            up[dx] = [dy,dz]
+                        if dx not in down:
+                            down[dx] = [dy,dz]
+                        elif dy > down[dx][0]:
+                            down[dx] = [dy,dz]
+                        elif down[dx][0] == dy and dz > down[dx][1]:
+                            down[dx] = [dy,dz]
+                for dy in left:
+                    size_x = right[dy][0] - left[dy][0] + 1
+                    dx = linspace(left[dy][0],right[dy][0],size_x).tolist()
+                    dz = linspace(left[dy][1],right[dy][1],size_x).tolist()
+                    for d in range(size_x):
+                        #if bottom[dy,int(dx[d])] < int(dz[d]):
+                        #    print int(dz[d]), "vs", bottom[dy,int(dx[d])]
+                        bottom[dy,int(dx[d])] = max( bottom[dy,int(dx[d])], dz[d] )
+                for dx in up:
+                    size_y = down[dx][0] - up[dx][0] + 1
+                    dy = linspace(down[dx][0],up[dx][0],size_y).tolist()
+                    dz = linspace(down[dx][1],up[dx][1],size_y).tolist()
+                    for d in range(size_y):
+                        #if bottom[dy,int(dx[d])] < int(dz[d]):
+                        #    print int(dz[d]), "vs", bottom[dy,int(dx[d])]
+                        bottom[int(dy[d]),dx] = max( bottom[int(dy[d]),dx], dz[d] )
         max_z = parameters["max_stl_z"] * stl_detail
         do_not_cut = zeros(bottom.shape)
         if max_z:
