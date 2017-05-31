@@ -58,31 +58,53 @@ def triangle_mesh_d(source_mesh):
 	#the idea is that once you know the D value, AX+BY+D=-CZ so -(AX+BY+D)/C = Z
 	#with that math in mind, you could try to interpolate any Z on a triangle as long as you know you are on the triangle
 	
-def bit_pixels(bit_shape="cylinder",diameter=3):
+def bit_pixels(bit_shape="cylinder",diameter=3,shaft_diameter=None,max_cut_depth=None):
+    #I hope to have this support specifying a length for the cutting area of the bit and a shaft diameter.
+    #That or I need a shaft_pixels function that will take the output and add it to a set of pixels for a shaft.
+    if bit_shape.startswith("v"):
+        if shaft_diameter and max_cut_depth and shaft_diameter != diameter:
+            exit("Error: Do not specify both a max_cut_depth and two different diameters for a V-bit.")
+        elif max_cut_depth:
+            v_cut_mode = "depth"
+        else:
+            v_cut_mode = "diameter"
+    if shaft_diameter == None:
+        shaft_diameter = diameter
+    elif shaft_diameter < diameter:
+        exit("Error: The bit's cutting diameter is listed as smaller than the shaft diameter and we do not support that yet.")
+    elif diameter < shaft_diameter and max_cut_depth == None:
+        exit("Error: The diameter of the cutting part of the bit is smaller than the shaft diameter, but no max_cut_depth was specified.")
     radius = diameter/2.0
-    if diameter % 2:
-        size = diameter
+    if int(shaft_diameter) % 2:
+        size = shaft_diameter
         x, y = mgrid[:size, :size]
         x = x + 0.5
         y = y + 0.5
     else:
-        size = diameter + 1
+        size = shaft_diameter + 1
         x, y = mgrid[:size, :size]
-    sphere = (x - radius) ** 2 + (y - radius) ** 2
+    sphere = (x - shaft_diameter/2.0) ** 2 + (y - shaft_diameter/2.0) ** 2
     circle_mask = ma.make_mask(sphere > radius**2) #true when outside the circle
+    shaft_mask = ma.make_mask(sphere <= (shaft_diameter/2.0)**2)
+    if max_cut_depth == None:
+        max_cut_depth = 10000
+    shaft_low = ones(circle_mask.shape) * shaft_mask * max_cut_depth
     high = ones(circle_mask.shape)*10000
-    if bit_shape in ["cylinder","ball","sphere"]:
-        if bit_shape == "cylinder":
-            output = circle_mask * high
+    if bit_shape in ["can","cylinder","ball","sphere"]:
+        if bit_shape in ["can","cylinder"]:
+            output = (shaft_mask & circle_mask) * max_cut_depth + (shaft_mask == False) * high
         else:
-            #print "test"
-            output = (circle_mask == False) * sphere + circle_mask * high
+            output = (circle_mask == False) * sqrt(sphere) + (shaft_mask & circle_mask) * max_cut_depth + (shaft_mask == False)* high
     elif bit_shape.startswith("v"):
         angle = float(bit_shape[1:])/2.0
         angle = radians(90-angle)
         step = tan(angle)
         cone = sqrt(sphere) * step
-        output = (circle_mask == False) *cone + circle_mask * high
+        if v_cut_mode == "depth":
+            cone_mask = cone < max_cut_depth
+            output = cone * cone_mask + (cone_mask == False) * high
+        else:
+            output = cone * shaft_mask  + (shaft_mask == False) * high
     return output
 
 def test_array_bounds(array_to_test,x,y):
@@ -878,6 +900,7 @@ if __name__ == "__main__":
             bottom[int(y[1]),int(x[1])] = max(bottom[int(y[1]),int(x[1])], int(z[1]))
             bottom[int(y[2]),int(x[2])] = max(bottom[int(y[2]),int(x[2])], int(z[2]))
             if (x.ptp() > 1) or (y.ptp() > 1):
+                #we need more detail so we will figure out where in the 3D space each dot on the edge of the triangles would be and then fill in the points inbetween
                 right = {}
                 left = {}
                 up = {}
