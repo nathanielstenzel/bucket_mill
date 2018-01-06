@@ -747,7 +747,7 @@ def final(bottom,passes="xy"):
         we_skipped_the_last_dot = False
         yrange = range(height)
         yrange.reverse()
-        cut_positions.append(("dot",(0,0,0)))
+        cut_positions.append(("simple",(xrange[0],yrange[0],0)))
         for x in xrange:
             for y in yrange:
                 z = bottom[y,x]
